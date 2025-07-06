@@ -1,0 +1,20 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Hospital Management API",
+    "version": "1.0.0",
+    "description": "API documentation for the MERN Hospital Management App."
+  },
+  "servers": [
+    { "url": "http://localhost:5000/api" }
+  ],
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "summary": "Login for all roles",
+        "responses": { "200": { "description": "Success" } }
+      }
+    }
+    
+  }
+} 
