@@ -13,8 +13,8 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
-// Base URL for your backend API
-const API_BASE_URL = 'http://localhost:5000/api';
+// Base URL for your backend API- change
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
