@@ -12,7 +12,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8010;
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI)
@@ -24,8 +24,9 @@ app.use(morgan('dev'));
 app.use(helmet());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
-const allowedOrigin = process.env.CLIENT_ORIGIN || '*';
-app.use(cors({ origin: allowedOrigin }));
+// const allowedOrigin = process.env.CLIENT_ORIGIN || '*';
+// app.use(cors({ origin: allowedOrigin }));
+app.use(cors({origin:"*"})); // Allow all origins for development; adjust in production
 app.use(express.json()); // Parse JSON request bodies
 
 // Routes
