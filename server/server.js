@@ -14,6 +14,10 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 const PORT = process.env.PORT || 8010;
 
+// Log environment variables for verification
+console.log('JWT_SECRET:', process.env.JWT_SECRET);
+console.log('MONGO_URI:', process.env.MONGO_URI);
+
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('MongoDB connected successfully'))
@@ -24,9 +28,16 @@ app.use(morgan('dev'));
 app.use(helmet());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
-// const allowedOrigin = process.env.CLIENT_ORIGIN || '*';
-// app.use(cors({ origin: allowedOrigin }));
-app.use(cors({origin:"*"})); // Allow all origins for development; adjust in production
+const allowedOrigins = [
+  "http://localhost:8011",
+  "http://202.51.3.49:8011"
+];
+app.use(cors({
+  origin: allowedOrigins,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+}));
 app.use(express.json()); // Parse JSON request bodies
 
 // Routes
