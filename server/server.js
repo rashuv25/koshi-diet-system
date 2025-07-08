@@ -28,16 +28,17 @@ app.use(morgan('dev'));
 app.use(helmet());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
-const allowedOrigins = [
-  "http://localhost:8011",
-  "http://202.51.3.49:8011"
-];
-app.use(cors({
-  origin: allowedOrigins,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true
-}));
+// const allowedOrigins = [
+//   "http://localhost:8011",
+//   "http://202.51.3.49:8011"
+// ];
+// app.use(cors({
+//   origin: allowedOrigins,
+//   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+//   allowedHeaders: ["Content-Type", "Authorization"],
+//   credentials: true
+// }));
+app.use(cors({origin: '*'})); // Enable CORS for all origins (adjust as needed)
 app.use(express.json()); // Parse JSON request bodies
 
 // Routes
