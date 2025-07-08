@@ -6,19 +6,14 @@ import NepaliDate from 'nepali-date-converter';
 import KoshiHospitalLogo from '../assets/koshi_hospital_logo.jpg';
 import './VendorDashboard.css';
 
-const wardNames = [
-  { label: 'Ortho', value: 'ortho' },
-  { label: 'Gyno', value: 'gyno' },
-  { label: 'Emergency', value: 'emergency' },
-  { label: 'Medical', value: 'medical' }
-];
-
 const VendorDashboard = () => {
   const { API_BASE_URL, showToast } = useAuth();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]); // All users with department
   const [patientRecords, setPatientRecords] = useState([]); // All patient records for today
   const [wardPatients, setWardPatients] = useState({}); // { ward: [patients] }
+  const [wards, setWards] = useState([]);
+  const [wardsLoading, setWardsLoading] = useState(true);
 
   // Logout handler
   const handleLogout = () => {
@@ -36,6 +31,23 @@ const VendorDashboard = () => {
   // Nepali date for display
   const bsToday = new NepaliDate(today);
   const nepaliDateStr = `${bsToday.getBS().year}/${String(bsToday.getBS().month + 1).padStart(2, '0')}/${String(bsToday.getBS().date).padStart(2, '0')}`;
+
+  // Fetch wards from backend
+  useEffect(() => {
+    const fetchWards = async () => {
+      setWardsLoading(true);
+      try {
+        const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
+        const res = await axios.get(`${API_BASE_URL}/vendor/wards`, config);
+        setWards(res.data.wards.map(w => w.name));
+      } catch (err) {
+        showToast('Error fetching wards', 'error');
+      } finally {
+        setWardsLoading(false);
+      }
+    };
+    fetchWards();
+  }, [API_BASE_URL, showToast]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -70,7 +82,7 @@ const VendorDashboard = () => {
     // eslint-disable-next-line
   }, []);
 
-  if (loading) return <Spinner />;
+  if (loading || wardsLoading) return <Spinner />;
 
   return (
     <div className="dashboard-container">
@@ -102,9 +114,9 @@ const VendorDashboard = () => {
         {/* Wards and tables will be rendered here */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           {/* Render for each ward */}
-          {wardNames.map(({ label, value }) => (
-            <div key={value} style={{ background: '#f8f9fa', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-              <h2 style={{ marginBottom: '0.7rem', color: '#2980b9', fontWeight: 600 }}>{label} Ward</h2>
+          {wards.map((ward) => (
+            <div key={ward} style={{ background: '#f8f9fa', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <h2 style={{ marginBottom: '0.7rem', color: '#2980b9', fontWeight: 600 }}>{ward.charAt(0).toUpperCase() + ward.slice(1)} Ward</h2>
               <div className="dashboard-table-section">
                 <table className="patient-table">
                   <thead>
@@ -140,8 +152,8 @@ const VendorDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {wardPatients[value] && wardPatients[value].length > 0 ? (
-                      wardPatients[value].map((p, idx) => (
+                    {wardPatients[ward] && wardPatients[ward].length > 0 ? (
+                      wardPatients[ward].map((p, idx) => (
                         <tr key={idx} className="table-row">
                           <td className="table-cell">{p.bedNo}</td>
                           <td className="table-cell">{p.ipdNumber}</td>

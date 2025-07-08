@@ -10,6 +10,7 @@ import KoshiHospitalLogo from '../assets/koshi_hospital_logo.jpg';
 import NepaliDate from 'nepali-date-converter';
 import jsPDF from 'jspdf';
 import './AdminDashboard.css';
+import SettingsLogo from '../assets/settings_logo.png';
 
 const AdminDashboard = () => {
     const { user, logout, showToast, API_BASE_URL } = useAuth();
@@ -85,7 +86,84 @@ const AdminDashboard = () => {
         return { start, end };
     };
 
-    const departments = ['ortho', 'gyno', 'emergency', 'medical'];
+    const [wards, setWards] = useState([]);
+    const [wardsLoading, setWardsLoading] = useState(true);
+    const [showWardSettings, setShowWardSettings] = useState(false);
+    const [newWardName, setNewWardName] = useState('');
+    const [editingWard, setEditingWard] = useState(null);
+    const [editingWardName, setEditingWardName] = useState('');
+
+    // Fetch wards from backend
+    useEffect(() => {
+        const fetchWards = async () => {
+            setWardsLoading(true);
+            try {
+                const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
+                const res = await axios.get(`${API_BASE_URL}/admin/wards`, config);
+                setWards(res.data.wards.map(w => w.name));
+            } catch (err) {
+                showToast('Error fetching wards', 'error');
+            } finally {
+                setWardsLoading(false);
+            }
+        };
+        fetchWards();
+    }, [API_BASE_URL]);
+
+    // CRUD handlers for wards
+    const handleCreateWard = async (e) => {
+        e.preventDefault();
+        if (!newWardName.trim()) return;
+        try {
+            const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
+            await axios.post(`${API_BASE_URL}/admin/wards`, { name: newWardName.trim() }, config);
+            setNewWardName('');
+            setShowWardSettings(false);
+            showToast('Ward created', 'success');
+            // Refresh wards
+            const res = await axios.get(`${API_BASE_URL}/admin/wards`, config);
+            setWards(res.data.wards.map(w => w.name));
+        } catch (err) {
+            showToast(err.response?.data?.message || 'Error creating ward', 'error');
+        }
+    };
+    const handleEditWard = (ward) => {
+        setEditingWard(ward);
+        setEditingWardName(ward);
+    };
+    const handleUpdateWard = async (e) => {
+        e.preventDefault();
+        if (!editingWardName.trim()) return;
+        try {
+            const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
+            const wardObj = await axios.get(`${API_BASE_URL}/admin/wards`, config);
+            const wardId = wardObj.data.wards.find(w => w.name === editingWard)._id;
+            await axios.put(`${API_BASE_URL}/admin/wards/${wardId}`, { name: editingWardName.trim() }, config);
+            setEditingWard(null);
+            setEditingWardName('');
+            showToast('Ward updated', 'success');
+            // Refresh wards
+            const res = await axios.get(`${API_BASE_URL}/admin/wards`, config);
+            setWards(res.data.wards.map(w => w.name));
+        } catch (err) {
+            showToast(err.response?.data?.message || 'Error updating ward', 'error');
+        }
+    };
+    const handleDeleteWard = async (ward) => {
+        if (!window.confirm('Are you sure you want to delete this ward?')) return;
+        try {
+            const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
+            const wardObj = await axios.get(`${API_BASE_URL}/admin/wards`, config);
+            const wardId = wardObj.data.wards.find(w => w.name === ward)._id;
+            await axios.delete(`${API_BASE_URL}/admin/wards/${wardId}`, config);
+            showToast('Ward deleted', 'success');
+            // Refresh wards
+            const res = await axios.get(`${API_BASE_URL}/admin/wards`, config);
+            setWards(res.data.wards.map(w => w.name));
+        } catch (err) {
+            showToast(err.response?.data?.message || 'Error deleting ward', 'error');
+        }
+    };
 
     // Diet columns for report
     const dietColumns = [
@@ -268,7 +346,7 @@ const AdminDashboard = () => {
                 const usersRes = await axios.get(`${API_BASE_URL}/admin/users`, config);
                 const users = usersRes.data.users;
                 const { start, end } = convertBSMonthToADRange(reportYear, reportMonth);
-                const wardNames = ['ortho', 'gyno', 'emergency', 'medical'];
+                const wardNames = wards; // Use the wards state
                 const reportRows = [];
                 let sn = 1;
                 for (const ward of wardNames) {
@@ -307,7 +385,7 @@ const AdminDashboard = () => {
             }
         };
         if (user && user.role === 'admin') fetchReport();
-    }, [user, API_BASE_URL, reportYear, reportMonth]);
+    }, [user, API_BASE_URL, reportYear, reportMonth, wards]);
 
     // Function to generate the monthly diet report
     const generateMonthlyDietReport = async () => {
@@ -539,7 +617,10 @@ const AdminDashboard = () => {
 
             {/* Report section title and month selector */}
             <div className="users-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '1rem' }}>
-                <h2 className="section-title" style={{ margin: 0, textAlign: 'left', fontWeight: 800 }}>Report</h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h2 className="section-title" style={{ margin: 0, textAlign: 'left', fontWeight: 800 }}>Report</h2>
+                    <img src={SettingsLogo} alt="Settings" style={{ width: 28, height: 28, cursor: 'pointer' }} onClick={() => setShowWardSettings(true)} />
+                </div>
                 <div style={{ display: 'flex', gap: 12 }}>
                     <select value={reportYear} onChange={e => setReportYear(e.target.value)} style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}>
                         <option value="2082">2082</option>
@@ -552,6 +633,40 @@ const AdminDashboard = () => {
                     </select>
                 </div>
             </div>
+            {/* Ward Settings Modal */}
+            {showWardSettings && (
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: '20px' }}>
+                    <div className="card" style={{ maxWidth: 400, width: '100%', position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
+                        <button onClick={() => setShowWardSettings(false)} style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>&times;</button>
+                        <h2 className="section-title" style={{ textAlign: 'center' }}>Manage Wards</h2>
+                        <form onSubmit={editingWard ? handleUpdateWard : handleCreateWard} className="form-layout">
+                            <div className="form-group">
+                                <label className="label" htmlFor="ward-name">Ward Name</label>
+                                <input type="text" id="ward-name" value={editingWard ? editingWardName : newWardName} onChange={e => editingWard ? setEditingWardName(e.target.value) : setNewWardName(e.target.value)} className="input-field" placeholder="Ward Name" required />
+                            </div>
+                            <button type="submit" className="button button-success" style={{ width: 200, alignSelf: 'center' }}>
+                                {editingWard ? 'Update Ward' : 'Create Ward'}
+                            </button>
+                        </form>
+                        <div style={{ marginTop: 24 }}>
+                            <h3 style={{ fontWeight: 600, marginBottom: 8 }}>Existing Wards</h3>
+                            {wardsLoading ? <Spinner /> : (
+                                <ul style={{ listStyle: 'none', padding: 0 }}>
+                                    {wards.map(ward => (
+                                        <li key={ward} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                            <span>{ward}</span>
+                                            <div>
+                                                <button className="button button-primary" style={{ marginRight: 8 }} onClick={() => handleEditWard(ward)}>Edit</button>
+                                                <button className="button button-danger" onClick={() => handleDeleteWard(ward)}>Delete</button>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
             <div className="dashboard-table-section" style={{width: '100%', maxWidth: '100%', margin: '1.2rem 0', overflowX: 'auto', color: '#111'}}>
                 <div style={{width: '100%', overflowX: 'auto'}}>
                   <table className="patient-table" style={{width: '100%', margin: 0, tableLayout: 'auto'}}>
@@ -605,7 +720,7 @@ const AdminDashboard = () => {
                                 <td className="table-cell diet-cell">{row.morningExtra['High protein'] || 0}</td>
                                 {/* Snacks */}
                                 <td className="table-cell diet-cell light-border">{row.launch['Biscuit'] || 0}</td>
-                                <td className="table-cell diet-cell">{row.launch['Satu'] || 0}</td>
+                                <td className="table-cell">{row.launch['Satu'] || 0}</td>
                                 {/* Night Meal */}
                                 <td className="table-cell diet-cell dark-border">{row.night['Normal diet'] || 0}</td>
                                 <td className="table-cell diet-cell light-border">{row.night['Under 12 years diet'] || 0}</td>
@@ -808,8 +923,8 @@ const AdminDashboard = () => {
 
             {/* Create User Modal */}
             {showCreateUser && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="card" style={{ maxWidth: 400, width: '100%', position: 'relative' }}>
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: '20px' }}>
+                    <div className="card" style={{ maxWidth: 400, width: '100%', position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
                         <button onClick={() => setShowCreateUser(false)} style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>&times;</button>
                         <h2 className="section-title" style={{ textAlign: 'center' }}>Create New User</h2>
                         <form onSubmit={handleCreateUser} className="form-layout">
@@ -832,8 +947,8 @@ const AdminDashboard = () => {
                             <div className="form-group">
                                 <label className="label" htmlFor="new-user-department">Ward</label>
                                 <select id="new-user-department" value={userDepartment} onChange={e => setUserDepartment(e.target.value)} className="input-field">
-                                    {departments.map(dept => (
-                                        <option key={dept} value={dept}>{dept.charAt(0).toUpperCase() + dept.slice(1)}</option>
+                                    {wards.map(ward => (
+                                        <option key={ward} value={ward}>{ward.charAt(0).toUpperCase() + ward.slice(1)}</option>
                                     ))}
                                 </select>
                             </div>
@@ -867,8 +982,8 @@ const AdminDashboard = () => {
                             <div className="form-group">
                                 <label className="label" htmlFor="edit-user-department">Ward</label>
                                 <select id="edit-user-department" name="department" value={editUserData.department} onChange={handleEditChange} className="input-field">
-                                    {departments.map(dept => (
-                                        <option key={dept} value={dept}>{dept.charAt(0).toUpperCase() + dept.slice(1)}</option>
+                                    {wards.map(ward => (
+                                        <option key={ward} value={ward}>{ward.charAt(0).toUpperCase() + ward.slice(1)}</option>
                                     ))}
                                 </select>
                             </div>
@@ -978,6 +1093,37 @@ const AdminDashboard = () => {
                             <button className="button button-primary" style={{ width: 100, margin: 0 }} onClick={() => { setShowDeleteVendor(false); setDeleteVendorId(null); }}>Cancel</button>
                             <button className="button button-danger" style={{ width: 100, margin: 0 }} onClick={handleDeleteVendorConfirm}>Yes</button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Create Vendor User Modal */}
+            {showCreateVendor && (
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: '20px' }}>
+                    <div className="card" style={{ maxWidth: 400, width: '100%', position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
+                        <button onClick={() => setShowCreateVendor(false)} style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>&times;</button>
+                        <h2 className="section-title" style={{ textAlign: 'center' }}>Create Vendor User</h2>
+                        <form onSubmit={handleCreateVendor} className="form-layout">
+                            <div className="form-group">
+                                <label className="label" htmlFor="vendor-name">Name</label>
+                                <input type="text" id="vendor-name" value={vendorName} onChange={e => setVendorName(e.target.value)} className="input-field" placeholder="Vendor Name" required />
+                            </div>
+                            <div className="form-group">
+                                <label className="label" htmlFor="vendor-email">Email</label>
+                                <input type="email" id="vendor-email" value={vendorEmail} onChange={e => setVendorEmail(e.target.value)} className="input-field" placeholder="Vendor Email" required />
+                            </div>
+                            <div className="form-group">
+                                <label className="label" htmlFor="vendor-password">Password</label>
+                                <input type="password" id="vendor-password" value={vendorPassword} onChange={e => setVendorPassword(e.target.value)} className="input-field" placeholder="Vendor Password" required />
+                            </div>
+                            <div className="form-group">
+                                <label className="label" htmlFor="vendor-phone">Phone Number</label>
+                                <input type="tel" id="vendor-phone" value={vendorPhone} onChange={e => setVendorPhone(e.target.value)} className="input-field" placeholder="Phone Number" required />
+                            </div>
+                            <button type="submit" className="button button-success" disabled={creatingVendor} style={{ width: 200, alignSelf: 'center' }}>
+                                {creatingVendor ? 'Creating...' : 'Create Vendor'}
+                            </button>
+                        </form>
                     </div>
                 </div>
             )}

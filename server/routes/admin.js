@@ -5,6 +5,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const Admin = require('../models/Admin');
+const Ward = require('../models/Ward');
 
 // @route   POST /api/admin/users
 // @desc    Admin creates a new user
@@ -122,6 +123,54 @@ router.get('/users/all', protect, authorize('vendor'), async (req, res) => {
         console.error(error);
         res.status(500).json({ message: 'Server error fetching all users' });
     }
+});
+
+// Get all wards
+router.get('/wards', protect, authorize('admin'), async (req, res) => {
+  try {
+    const wards = await Ward.find();
+    res.json({ wards });
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching wards' });
+  }
+});
+
+// Create a new ward
+router.post('/wards', protect, authorize('admin'), async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ message: 'Ward name is required' });
+    const existing = await Ward.findOne({ name });
+    if (existing) return res.status(400).json({ message: 'Ward already exists' });
+    const ward = new Ward({ name });
+    await ward.save();
+    res.json({ message: 'Ward created', ward });
+  } catch (err) {
+    res.status(500).json({ message: 'Error creating ward' });
+  }
+});
+
+// Update a ward
+router.put('/wards/:id', protect, authorize('admin'), async (req, res) => {
+  try {
+    const { name } = req.body;
+    const ward = await Ward.findByIdAndUpdate(req.params.id, { name }, { new: true });
+    if (!ward) return res.status(404).json({ message: 'Ward not found' });
+    res.json({ message: 'Ward updated', ward });
+  } catch (err) {
+    res.status(500).json({ message: 'Error updating ward' });
+  }
+});
+
+// Delete a ward
+router.delete('/wards/:id', protect, authorize('admin'), async (req, res) => {
+  try {
+    const ward = await Ward.findByIdAndDelete(req.params.id);
+    if (!ward) return res.status(404).json({ message: 'Ward not found' });
+    res.json({ message: 'Ward deleted' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error deleting ward' });
+  }
 });
 
 module.exports = router;
