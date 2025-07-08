@@ -13,8 +13,8 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
-// Base URL for your backend API- change
-const API_BASE_URL = import.meta.env.VITE_API_URL;
+// Base URL for your backend API
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://202.51.3.49:8010/api';
 
 const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
@@ -29,12 +29,9 @@ const AuthProvider = ({ children }) => {
         if (storedUser && storedToken) {
             try {
                 const parsedUser = JSON.parse(storedUser);
-                if (parsedUser.role === 'user') { // Only load if it's a user role for this client
-                    setUser(parsedUser);
-                    axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
-                } else {
-                    localStorage.clear();
-                }
+                // Allow all roles (admin, user, vendor) to be loaded
+                setUser(parsedUser);
+                axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
             } catch (error) {
                 console.error("Failed to parse stored user data:", error);
                 localStorage.clear();

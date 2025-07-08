@@ -17,8 +17,10 @@ const Login = () => {
     const handleLogin = async (e) => {
         e.preventDefault();
         setLoading(true);
+        
         try {
             const res = await axios.post(`${API_BASE_URL}/auth/login`, { email, password });
+            
             if (res.data.user.role === 'vendor') {
                 login(res.data.user, res.data.token);
                 showToast(res.data.message, 'success');
@@ -27,7 +29,12 @@ const Login = () => {
             login(res.data.user, res.data.token);
             showToast(res.data.message, 'success');
         } catch (error) {
-            console.error("Login error:", error.response?.data?.message || error.message);
+            console.error("Login error details:", {
+                message: error.message,
+                response: error.response?.data,
+                status: error.response?.status,
+                statusText: error.response?.statusText
+            });
             showToast(error.response?.data?.message || 'Login failed', 'error');
         } finally {
             setLoading(false);
@@ -47,7 +54,6 @@ const Login = () => {
     return (
         <div className="login-page-container">
             {loading && <Spinner />}
-            <Toast message={null} type={null} onClose={() => {}} />
 
             <div className="card">
                 <img

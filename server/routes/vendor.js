@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const Vendor = require('../models/Vendor');
-const bcrypt = require('bcryptjs');
 const { protect } = require('../middleware/authMiddleware');
 const PatientRecord = require('../models/PatientRecord');
 const Ward = require('../models/Ward');
@@ -10,11 +9,13 @@ const Ward = require('../models/Ward');
 router.post('/create', protect, async (req, res) => {
   try {
     const { name, email, password, phone } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const vendor = new Vendor({ name, email, password: hashedPassword, phone });
+    console.log('Creating vendor with email:', email);
+    const vendor = new Vendor({ name, email, password, phone });
     await vendor.save();
+    console.log('Vendor created successfully, password hashed:', vendor.password.startsWith('$2b$'));
     res.status(201).json({ message: 'Vendor created successfully', vendor });
   } catch (err) {
+    console.error('Vendor creation error:', err);
     res.status(400).json({ error: err.message });
   }
 });
