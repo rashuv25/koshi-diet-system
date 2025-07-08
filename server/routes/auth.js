@@ -191,7 +191,23 @@ router.post('/login', async (req, res) => {
             console.log('No admin, user, or vendor found:', email);
             return res.status(400).json({ message: 'Invalid credentials' });
         }
-        const isMatch = await require('bcryptjs').compare(password, vendor.password);
+        
+        console.log('Vendor found:', vendor.email);
+        console.log('Password type check:', vendor.password.startsWith('$2b$') ? 'Hashed' : 'Plain text');
+        
+        // Handle both hashed and plain text passwords for vendors
+        let isMatch = false;
+        try {
+            // Try to use the comparePassword method first
+            isMatch = await vendor.comparePassword(password);
+            console.log('Vendor password comparison result:', isMatch);
+        } catch (error) {
+            // If comparePassword fails, try direct comparison for plain text passwords
+            console.log('Vendor password comparison failed, trying direct comparison');
+            isMatch = (vendor.password === password);
+            console.log('Direct comparison result:', isMatch);
+        }
+        
         if (!isMatch) {
             console.log('Vendor found but password mismatch:', email);
             return res.status(400).json({ message: 'Invalid credentials' });
