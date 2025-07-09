@@ -3,8 +3,13 @@ import axios from 'axios';
 import { useAuth } from '../App';
 import Spinner from './Spinner';
 import NepaliDate from 'nepali-date-converter';
-import KoshiHospitalLogo from '../assets/koshi_hospital_logo.jpg';
-import './VendorDashboard.css';
+
+const wardNames = [
+  { label: 'Ortho', value: 'ortho' },
+  { label: 'Gyno', value: 'gyno' },
+  { label: 'Emergency', value: 'emergency' },
+  { label: 'Medical', value: 'medical' }
+];
 
 const VendorDashboard = () => {
   const { API_BASE_URL, showToast } = useAuth();
@@ -12,8 +17,6 @@ const VendorDashboard = () => {
   const [users, setUsers] = useState([]); // All users with department
   const [patientRecords, setPatientRecords] = useState([]); // All patient records for today
   const [wardPatients, setWardPatients] = useState({}); // { ward: [patients] }
-  const [wards, setWards] = useState([]);
-  const [wardsLoading, setWardsLoading] = useState(true);
 
   // Logout handler
   const handleLogout = () => {
@@ -31,23 +34,6 @@ const VendorDashboard = () => {
   // Nepali date for display
   const bsToday = new NepaliDate(today);
   const nepaliDateStr = `${bsToday.getBS().year}/${String(bsToday.getBS().month + 1).padStart(2, '0')}/${String(bsToday.getBS().date).padStart(2, '0')}`;
-
-  // Fetch wards from backend
-  useEffect(() => {
-    const fetchWards = async () => {
-      setWardsLoading(true);
-      try {
-        const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
-        const res = await axios.get(`${API_BASE_URL}/vendor/wards`, config);
-        setWards(res.data.wards.map(w => w.name));
-      } catch (err) {
-        showToast('Error fetching wards', 'error');
-      } finally {
-        setWardsLoading(false);
-      }
-    };
-    fetchWards();
-  }, [API_BASE_URL, showToast]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -82,126 +68,149 @@ const VendorDashboard = () => {
     // eslint-disable-next-line
   }, []);
 
-  if (loading || wardsLoading) return <Spinner />;
+  if (loading) return <Spinner />;
 
   return (
-    <div className="dashboard-container">
-      {/* Header: logo left, logout right */}
-      <div className="header" style={{ alignItems: 'center', marginBottom: '1.5rem' }}>
-        <img src={KoshiHospitalLogo} alt="Koshi Hospital Logo" className="logo" style={{ marginRight: '1.5rem', marginBottom: 0 }} />
-        <div style={{ flex: 1 }}></div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-          <button
-            onClick={handleLogout}
-            className="button button-danger dashboard-logout-btn"
-            style={{ minWidth: 120, marginBottom: 4 }}
-          >
-            Logout
-          </button>
-        </div>
+    <div className="dashboard-container" style={{
+      maxWidth: '1100px',
+      margin: '2rem auto',
+      background: '#fff',
+      borderRadius: '12px',
+      boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+      padding: '2rem',
+      position: 'relative',
+      minHeight: '80vh',
+    }}>
+      {/* Logout button */}
+      <button
+        onClick={handleLogout}
+        style={{
+          position: 'absolute',
+          top: '2rem',
+          right: '2rem',
+          background: '#e74c3c',
+          color: '#fff',
+          border: 'none',
+          borderRadius: '6px',
+          padding: '0.5rem 1.2rem',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+          fontSize: '1rem',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.07)'
+        }}
+      >
+        Logout
+      </button>
+      <h1 style={{ textAlign: 'center', margin: '1rem 0 0.5rem 0', color: '#2c3e50', fontWeight: 700, letterSpacing: '1px' }}>
+        Vendor Dashboard
+      </h1>
+      {/* Date at the top center */}
+      <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '1.5rem', color: '#555' }}>
+        {`मिति (वि.सं.): ${nepaliDateStr}`}
       </div>
-
-      <div className="dashboard-main-content">
-        <div className="dashboard-center-titles">
-          <h1 className="dashboard-hospital-title">कोशी अस्पताल, विराटनगर</h1>
-          <h2 className="dashboard-form-title">बिरामीहरुको डाईट फारम</h2>
-        </div>
-        <div className="dashboard-ward-date-row">
-          <div className="dashboard-ward">Ward: <span className="dashboard-ward-value">All</span></div>
-          <div className="dashboard-date">Date: <span className="dashboard-date-value">{nepaliDateStr}</span></div>
-        </div>
-
-        {/* Wards and tables will be rendered here */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-          {/* Render for each ward */}
-          {wards.map((ward) => (
-            <div key={ward} style={{ background: '#f8f9fa', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-              <h2 style={{ marginBottom: '0.7rem', color: '#2980b9', fontWeight: 600 }}>{ward.charAt(0).toUpperCase() + ward.slice(1)} Ward</h2>
-              <div className="dashboard-table-section">
-                <table className="patient-table">
-                  <thead>
-                    <tr>
-                      <th rowSpan="2" className="diet-stack">Bed<br/>No.</th>
-                      <th rowSpan="2" className="diet-stack">IPD<br/>No.</th>
-                      <th rowSpan="2" className="diet-stack">Patient<br/>name</th>
-                      <th rowSpan="2" className="dark-border">Age</th>
-                                                      <th colSpan="4">Tomorrow's Morning meal</th>
-                      <th colSpan="3">Any one</th>
-                      <th colSpan="2">Snacks</th>
-                      <th colSpan="5">Night Meal (any one)</th>
-                      <th colSpan="3">Any one</th>
-                    </tr>
-                    <tr>
-                      <th className="light-border diet-stack">Simple<br/>diet</th>
-                      <th className="light-border diet-stack">Under 12<br/>years<br/>diet</th>
-                      <th className="light-border diet-stack">Soft<br/>diet</th>
-                      <th className="dark-border diet-stack">Liquid<br/>diet</th>
-                      <th className="light-border">Egg</th>
-                      <th className="dark-border">Milk</th>
-                      <th className="light-border">High protein</th>
-                      <th className="light-border">Biscuit</th>
-                      <th className="dark-border">Satu</th>
-                      <th className="light-border diet-stack">Simple<br/>diet</th>
-                      <th className="light-border diet-stack">Under 12<br/>years<br/>diet</th>
-                      <th className="light-border diet-stack">Soft<br/>diet</th>
-                      <th className="light-border diet-stack">Liquid<br/>diet</th>
-                      <th className="dark-border diet-stack">Chapati<br/>diet</th>
-                                                <th className="light-border">Egg</th>
-                          <th>Milk</th>
-                          <th className="light-border">High protein</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {wardPatients[ward] && wardPatients[ward].length > 0 ? (
-                      wardPatients[ward].map((p, idx) => (
-                        <tr key={idx} className="table-row">
-                          <td className="table-cell">{p.bedNo}</td>
-                          <td className="table-cell">{p.ipdNumber}</td>
-                          <td className="table-cell">{p.name}</td>
-                          <td className="table-cell dark-border">{p.age}</td>
-                          {/* Tomorrow's Morning meal */}
-                          {['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet'].map((opt, i) => (
-                            <td className={`table-cell diet-cell${i < 3 ? ' light-border' : ' dark-border'}`} key={`morningMeal-${i}`}>
-                              <span className={`diet-box ${p.morningMeal === opt ? 'selected' : ''}`}></span>
-                            </td>
-                          ))}
-                          {/* Morning Extra */}
-                          {['Egg', 'Milk', 'High protein'].map((opt, i) => (
-                            <td className={`table-cell diet-cell${i === 0 ? ' light-border' : i === 1 ? ' dark-border' : ' light-border'}`} key={`morningExtra-${i}`}>
-                              <span className={`diet-box ${p.morningExtra === opt ? 'selected' : ''}`}></span>
-                            </td>
-                          ))}
-                          {/* Snacks */}
-                          {['Biscuit', 'Satu'].map((opt, i) => (
-                            <td className={`table-cell diet-cell${i === 0 ? ' light-border' : ' dark-border'}`} key={`launch-${i}`}>
-                              <span className={`diet-box ${p.launch === opt ? 'selected' : ''}`}></span>
-                            </td>
-                          ))}
-                          {/* Night Meal */}
-                          {['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet', 'Chapati diet'].map((opt, i) => (
-                            <td className={`table-cell diet-cell${i < 4 ? ' light-border' : ' dark-border'}`} key={`nightMeal-${i}`}>
-                              <span className={`diet-box ${p.nightMeal === opt ? 'selected' : ''}`}></span>
-                            </td>
-                          ))}
-                          {/* Night Extra */}
-                          {['Egg', 'Milk', 'High protein'].map((opt, i) => (
-                            <td className={`table-cell diet-cell${i === 0 ? ' light-border' : i === 1 ? '' : ' light-border'}`} key={`nightExtra-${i}`}>
-                              <span className={`diet-box ${p.nightExtra === opt ? 'selected' : ''}`}></span>
-                            </td>
-                          ))}
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="20" style={{ textAlign: 'center', color: '#888' }}>[No patient data]</td>
+      {/* Wards and tables will be rendered here */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        {/* Render for each ward */}
+        {wardNames.map(({ label, value }) => (
+          <div key={value} style={{ background: '#f8f9fa', borderRadius: '8px', padding: '1.2rem 0.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+            <h2 style={{ marginBottom: '0.7rem', color: '#2980b9', fontWeight: 600, paddingLeft: '1rem' }}>{label} Ward</h2>
+            <div className="table-container">
+              <table className="patient-table" style={{width: '100%', tableLayout: 'fixed', background: '#f6edff'}}>
+                <thead>
+                  <tr>
+                    <th rowSpan="2" style={{background:'#f6edff'}}>Bed No.</th>
+                    <th rowSpan="2" style={{background:'#f6edff'}}>IPD No.</th>
+                    <th rowSpan="2" style={{background:'#f6edff'}}>Patient name</th>
+                    <th rowSpan="2" style={{background:'#f6edff'}}>Age</th>
+                    <th colSpan="4" style={{background:'#f6edff'}}>Morning Meal (any one)</th>
+                    <th colSpan="2" style={{background:'#f6edff'}}>Any one</th>
+                    <th colSpan="2" style={{background:'#f6edff'}}>Launch (any one)</th>
+                    <th colSpan="5" style={{background:'#f6edff'}}>Night Meal (any one)</th>
+                    <th colSpan="2" style={{background:'#f6edff'}}>Any one</th>
+                  </tr>
+                  <tr>
+                    <th style={{background:'#f6edff'}}>Simple diet</th>
+                    <th style={{background:'#f6edff'}}>Under 12 years diet</th>
+                    <th style={{background:'#f6edff'}}>Soft diet</th>
+                    <th style={{background:'#f6edff'}}>Liquid diet</th>
+                    <th style={{background:'#f6edff'}}>Egg</th>
+                    <th style={{background:'#f6edff'}}>Milk</th>
+                    <th style={{background:'#f6edff'}}>Biscuit</th>
+                    <th style={{background:'#f6edff'}}>Satu</th>
+                    <th style={{background:'#f6edff'}}>Simple diet</th>
+                    <th style={{background:'#f6edff'}}>Under 12 years diet</th>
+                    <th style={{background:'#f6edff'}}>Soft diet</th>
+                    <th style={{background:'#f6edff'}}>Liquid diet</th>
+                    <th style={{background:'#f6edff'}}>Chapati diet</th>
+                    <th style={{background:'#f6edff'}}>Egg</th>
+                    <th style={{background:'#f6edff'}}>Milk</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {wardPatients[value] && wardPatients[value].length > 0 ? (
+                    wardPatients[value].map((p, idx) => (
+                      <tr key={idx} className="table-row">
+                        <td className="table-cell">{p.bedNo}</td>
+                        <td className="table-cell">{p.ipdNumber}</td>
+                        <td className="table-cell">{p.name}</td>
+                        <td className="table-cell">{p.age}</td>
+                        <td className="table-cell diet-cell">
+                          <span className={`diet-box ${p.morningMeal === 'Simple diet' ? 'selected' : ''}`}></span>
+                        </td>
+                        <td className="table-cell diet-cell">
+                          <span className={`diet-box ${p.morningMeal === 'Under 12 years diet' ? 'selected' : ''}`}></span>
+                        </td>
+                        <td className="table-cell diet-cell">
+                          <span className={`diet-box ${p.morningMeal === 'Soft diet' ? 'selected' : ''}`}></span>
+                        </td>
+                        <td className="table-cell diet-cell">
+                          <span className={`diet-box ${p.morningMeal === 'Liquid diet' ? 'selected' : ''}`}></span>
+                        </td>
+                        <td className="table-cell diet-cell">
+                          <span className={`diet-box ${p.morningExtra === 'Egg' ? 'selected' : ''}`}></span>
+                        </td>
+                        <td className="table-cell diet-cell">
+                          <span className={`diet-box ${p.morningExtra === 'Milk' ? 'selected' : ''}`}></span>
+                        </td>
+                        <td className="table-cell diet-cell">
+                          <span className={`diet-box ${p.launch === 'Biscuit' ? 'selected' : ''}`}></span>
+                        </td>
+                        <td className="table-cell diet-cell">
+                          <span className={`diet-box ${p.launch === 'Satu' ? 'selected' : ''}`}></span>
+                        </td>
+                        <td className="table-cell diet-cell">
+                          <span className={`diet-box ${p.nightMeal === 'Simple diet' ? 'selected' : ''}`}></span>
+                        </td>
+                        <td className="table-cell diet-cell">
+                          <span className={`diet-box ${p.nightMeal === 'Under 12 years diet' ? 'selected' : ''}`}></span>
+                        </td>
+                        <td className="table-cell diet-cell">
+                          <span className={`diet-box ${p.nightMeal === 'Soft diet' ? 'selected' : ''}`}></span>
+                        </td>
+                        <td className="table-cell diet-cell">
+                          <span className={`diet-box ${p.nightMeal === 'Liquid diet' ? 'selected' : ''}`}></span>
+                        </td>
+                        <td className="table-cell diet-cell">
+                          <span className={`diet-box ${p.nightMeal === 'Chapati diet' ? 'selected' : ''}`}></span>
+                        </td>
+                        <td className="table-cell diet-cell">
+                          <span className={`diet-box ${p.nightExtra === 'Egg' ? 'selected' : ''}`}></span>
+                        </td>
+                        <td className="table-cell diet-cell">
+                          <span className={`diet-box ${p.nightExtra === 'Milk' ? 'selected' : ''}`}></span>
+                        </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="20" className="no-data">No patient records found for this ward</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
     </div>
   );

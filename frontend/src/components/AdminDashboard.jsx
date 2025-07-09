@@ -752,7 +752,7 @@ const AdminDashboard = () => {
             {/* Monthly Diet Report Modal */}
             {showMonthlyDietReport && (
                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="card" style={{ maxWidth: 900, width: '95%', position: 'relative' }}>
+                    <div className="card" style={{ maxWidth: 900, width: '95%', position: 'relative', maxHeight: '90vh', overflowY: 'auto', padding: '32px 24px 24px 24px' }}>
                         <button 
                             onClick={() => {
                                 setShowMonthlyDietReport(false);
@@ -805,7 +805,7 @@ const AdminDashboard = () => {
 
                         {/* Report Table */}
                         {monthlyDietReport.length > 0 && (
-                            <div style={{ maxHeight: '400px', overflowX: 'auto' }}>
+                            <div style={{ maxHeight: '400px', overflowX: 'auto', overflowY: 'auto' }}>
                                 <table className="data-table" style={{ width: '100%', minWidth: '400px', color: '#111' }}>
                                     <thead>
                                         <tr>
