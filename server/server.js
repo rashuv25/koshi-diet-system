@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 8010;
 
 // Production CORS configuration
 const allowedOrigins = [
-  "http://202.51.3.49:8011"
+  process.env.CORS_ORIGIN
 ];
 
 app.use(cors({
@@ -42,7 +42,7 @@ mongoose.connect(process.env.MONGO_URI)
 // Middleware
 app.use(morgan('dev'));
 app.use(helmet());
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 10000 }));
 app.use(express.json()); // Parse JSON request bodies
 
 // Routes

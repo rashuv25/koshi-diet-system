@@ -14,7 +14,7 @@ const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
 // Base URL for your backend API
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://202.51.3.49:8010/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
@@ -29,9 +29,13 @@ const AuthProvider = ({ children }) => {
         if (storedUser && storedToken) {
             try {
                 const parsedUser = JSON.parse(storedUser);
-                // Allow all roles (admin, user, vendor) to be loaded
-                setUser(parsedUser);
-                axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+                // Ensure user object has a valid role
+                if (parsedUser.role === 'admin' || parsedUser.role === 'vendor' || parsedUser.role === 'user') {
+                    setUser(parsedUser);
+                    axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+                } else {
+                    localStorage.clear();
+                }
             } catch (error) {
                 console.error("Failed to parse stored user data:", error);
                 localStorage.clear();

@@ -20,13 +20,17 @@ const Login = () => {
         
         try {
             const res = await axios.post(`${API_BASE_URL}/auth/login`, { email, password });
-            
-            if (res.data.user.role === 'vendor') {
-                login(res.data.user, res.data.token);
-                showToast(res.data.message, 'success');
+            const user = res.data.user;
+            const token = res.data.token;
+
+            // Ensure user object has a role property
+            if (!user.role) {
+                showToast('Login failed: user role missing', 'error');
+                setLoading(false);
                 return;
             }
-            login(res.data.user, res.data.token);
+
+            login(user, token);
             showToast(res.data.message, 'success');
         } catch (error) {
             console.error("Login error details:", {

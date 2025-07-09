@@ -7,6 +7,6 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '0.0.0.0',
-    port: 8011, // Ensure this port matches your frontend's port
+    port: 8011, // Changed to match backend CORS_ORIGIN for local development
   }
 })
