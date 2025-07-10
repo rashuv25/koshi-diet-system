@@ -613,12 +613,15 @@ const AdminDashboard = () => {
             </div>
 
             {/* New hospital/emblem/flag header row */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.2rem', gap: 12 }}>
-                <img src={NepaliEmblem} alt="Nepali Emblem" style={{ height: 48, width: 'auto' }} />
-                <div style={{ fontSize: 28, fontWeight: 700, color: '#b71c1c', textAlign: 'center', letterSpacing: 1, margin: '0 16px' }}>
-                    कोशी अस्पताल, विराटनगर
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.2rem', gap: 32 }}>
+                <img src={NepaliEmblem} alt="Nepali Emblem" style={{ height: '120px', width: 'auto' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.2 }}>
+                    <div style={{ fontSize: 16, color: '#b71c1c', fontWeight: 400 }}>नेपाल सरकार</div>
+                    <div style={{ fontSize: 16, color: '#b71c1c', fontWeight: 400 }}>स्वास्थ्य तथा जनसंख्या मन्त्रालय</div>
+                    <div style={{ fontSize: 28, color: '#111', fontWeight: 700, margin: '6px 0 0 0' }}>कोशी अस्पताल</div>
+                    <div style={{ fontSize: 16, color: '#b71c1c', fontWeight: 400 }}>विराटनगर, नेपाल</div>
                 </div>
-                <img src={NepaliFlag} alt="Nepali Flag" style={{ height: 36, width: 'auto' }} />
+                <img src={NepaliFlag} alt="Nepali Flag" style={{ height: '120px', width: 'auto' }} />
             </div>
 
             {/* Centered main title */}

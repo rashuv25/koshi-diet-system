@@ -6,6 +6,8 @@ import KoshiHospitalLogo from '../assets/koshi_hospital_logo.jpg';
 import Spinner from './Spinner';
 import Toast from './Toast';
 import './Login.css';
+import NepaliEmblem from '../assets/nepali_emblem.png';
+import NepaliFlag from '../assets/nepal_flag.png';
 
 const Login = () => {
     const { login, showToast, API_BASE_URL } = useAuth();
@@ -59,7 +61,19 @@ const Login = () => {
         <div className="login-page-container">
             {loading && <Spinner />}
 
-            <div className="card">
+            <div className="card" style={{ maxWidth: 520, width: '100%' }}>
+                {/* Government Header INSIDE the card, above the logo */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '18px 0 18px 0', gap: 32 }}>
+                    <img src={NepaliEmblem} alt="Nepali Emblem" style={{ height: '90px', width: 'auto' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.2 }}>
+                        <div style={{ fontSize: 14, color: '#b71c1c', fontWeight: 400 }}>नेपाल सरकार</div>
+                        <div style={{ fontSize: 14, color: '#b71c1c', fontWeight: 400, whiteSpace: 'nowrap' }}>स्वास्थ्य तथा जनसंख्या मन्त्रालय</div>
+                        <div className="govt-koshi-title" style={{ fontSize: 22, color: '#111', fontWeight: 700, margin: '6px 0 0 0', color: '#111 !important' }}>कोशी अस्पताल</div>
+                        <div style={{ fontSize: 14, color: '#b71c1c', fontWeight: 400 }}>विराटनगर, नेपाल</div>
+                    </div>
+                    <img src={NepaliFlag} alt="Nepali Flag" style={{ height: '90px', width: 'auto' }} />
+                </div>
+
                 <img
                     src={KoshiHospitalLogo}
                     alt="Koshi Hospital Logo"
