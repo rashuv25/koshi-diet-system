@@ -540,3 +540,8 @@
 .card .data-table thead {
   color: #111 !important;
 } 
+
+.admin-main-title {
+  color: #111 !important;
+  font-size: 1.5rem;
+} 

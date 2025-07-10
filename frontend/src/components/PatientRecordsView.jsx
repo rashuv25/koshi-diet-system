@@ -213,7 +213,7 @@ const PatientRecordsView = ({ user, onClose }) => {
                                             <th className="diet-stack" rowSpan="2"><span>IPD<br/>No.</span></th>
                                             <th className="diet-stack" rowSpan="2"><span>Patient<br/>name</span></th>
                                             <th rowSpan="2" className="dark-border">Age</th>
-                                            <th colSpan="4">Tomorrow's Morning meal</th>
+                                            <th colSpan="4">Morning meal</th>
                                             <th colSpan="3">Any one</th>
                                             <th colSpan="2">Snacks</th>
                                             <th colSpan="5">Night Meal (any one)</th>

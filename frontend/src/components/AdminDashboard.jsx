@@ -11,6 +11,8 @@ import NepaliDate from 'nepali-date-converter';
 import jsPDF from 'jspdf';
 import './AdminDashboard.css';
 import SettingsLogo from '../assets/settings_logo.png';
+import NepaliEmblem from '../assets/nepali_emblem.png';
+import NepaliFlag from '../assets/nepal_flag.png';
 
 const AdminDashboard = () => {
     const { user, logout, showToast, API_BASE_URL } = useAuth();
@@ -476,7 +478,7 @@ const AdminDashboard = () => {
                 y += 7;
             });
         };
-        printMain('Tomorrow\'s Morning meal', ['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet'], monthlyDietReport[0].morning);
+        printMain('Morning meal', ['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet'], monthlyDietReport[0].morning);
         printMain('Any one', ['Egg', 'Milk', 'High protein'], monthlyDietReport[0].morningExtra);
         printMain('Snacks', ['Biscuit', 'Satu'], monthlyDietReport[0].launch);
         printMain('Night Meal (any one)', ['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet', 'Chapati diet'], monthlyDietReport[0].night);
@@ -610,8 +612,17 @@ const AdminDashboard = () => {
                 </div>
             </div>
 
+            {/* New hospital/emblem/flag header row */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.2rem', gap: 12 }}>
+                <img src={NepaliEmblem} alt="Nepali Emblem" style={{ height: 48, width: 'auto' }} />
+                <div style={{ fontSize: 28, fontWeight: 700, color: '#b71c1c', textAlign: 'center', letterSpacing: 1, margin: '0 16px' }}>
+                    कोशी अस्पताल, विराटनगर
+                </div>
+                <img src={NepaliFlag} alt="Nepali Flag" style={{ height: 36, width: 'auto' }} />
+            </div>
+
             {/* Centered main title */}
-            <h1 className="main-title" style={{ marginTop: 0, marginBottom: '2rem', textAlign: 'center' }}>
+            <h1 className="admin-main-title" style={{ marginTop: 0, marginBottom: '2rem', textAlign: 'center', color: '#111' }}>
                 Patient Diet System
             </h1>
 
@@ -674,7 +685,7 @@ const AdminDashboard = () => {
                         <tr>
                             <th rowSpan="2" className="diet-stack">Sn.</th>
                             <th rowSpan="2" className="diet-stack">Ward</th>
-                            <th colSpan="4">Tomorrow's Morning meal</th>
+                            <th colSpan="4">Morning meal</th>
                             <th colSpan="3">Any one</th>
                             <th colSpan="2">Snacks</th>
                             <th colSpan="5">Night Meal (any one)</th>
@@ -815,7 +826,7 @@ const AdminDashboard = () => {
                                     </thead>
                                     <tbody style={{ color: '#111' }}>
                                         {/* Tomorrow's Morning meal */}
-                                        <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Tomorrow's Morning meal</td></tr>
+                                        <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Morning meal</td></tr>
                                         <tr><td style={{ paddingLeft: 24, color: '#111' }}>Normal diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morning["Normal diet"] || 0}</td></tr>
                                         <tr><td style={{ paddingLeft: 24, color: '#111' }}>Under 12 years diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morning["Under 12 years diet"] || 0}</td></tr>
                                         <tr><td style={{ paddingLeft: 24, color: '#111' }}>Soft diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morning["Soft diet"] || 0}</td></tr>

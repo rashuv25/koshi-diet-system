@@ -6,22 +6,93 @@ import Spinner from './Spinner';
 import Toast from './Toast';
 import KoshiHospitalLogo from '../assets/koshi_hospital_logo.jpg';
 import NepaliDate from 'nepali-date-converter';
+import NepaliEmblem from '../assets/nepali_emblem.png';
+import NepaliFlag from '../assets/nepal_flag.png';
 import './UserDashboard.css';
+
+const groupSeparatorStyle = {
+  borderRight: '3px solid #374151', // dark border
+};
+const groupSeparatorLeftStyle = {
+  borderLeft: '3px solid #374151',
+};
+const groupSeparatorBottomStyle = {
+  borderBottom: '3px solid #374151',
+};
+const groupSeparatorRightStyle = {
+  borderRight: '3px solid #374151',
+};
 
 const UserDashboard = () => {
     const { user, logout, showToast, API_BASE_URL } = useAuth();
     
-    // Initialize with current date in BS format
+    // Use the new today/tomorrow variables for date logic
     const today = new Date();
-    const bsDate = new NepaliDate(today);
+    const tomorrow = new Date();
+    tomorrow.setDate(today.getDate() + 1);
+    const bsToday = new NepaliDate(today);
+    const bsTomorrow = new NepaliDate(tomorrow);
+    const bsTodayStr = `${bsToday.getBS().year}/${String(bsToday.getBS().month + 1).padStart(2, '0')}/${String(bsToday.getBS().date).padStart(2, '0')}`;
+    const bsTomorrowStr = `${bsTomorrow.getBS().year}/${String(bsTomorrow.getBS().month + 1).padStart(2, '0')}/${String(bsTomorrow.getBS().date).padStart(2, '0')}`;
+    const adTodayStr = today.toISOString().split('T')[0];
+    const adTomorrowStr = tomorrow.toISOString().split('T')[0];
+
     const [selectedDate, setSelectedDate] = useState(today.toISOString().split('T')[0]); // Keep English date for API
-    const [nepaliDate, setNepaliDate] = useState(
-        `${bsDate.getBS().year}/${String(bsDate.getBS().month + 1).padStart(2, '0')}/${String(bsDate.getBS().date).padStart(2, '0')}`
-    );
+    const [nepaliDate, setNepaliDate] = useState(bsTodayStr);
     const [patientRows, setPatientRows] = useState([{}, {}]);
     const [fetchingPatients, setFetchingPatients] = useState(true);
     const [savingData, setSavingData] = useState(false);
     // Removed showDischarged state
+
+    // Add state for date selection (today/tomorrow)
+    const [dateOption, setDateOption] = useState('today');
+
+    // Update selectedDate and nepaliDate when dateOption changes
+    useEffect(() => {
+        if (dateOption === 'today') {
+            setNepaliDate(bsTodayStr);
+            setSelectedDate(adTodayStr);
+        } else {
+            setNepaliDate(bsTomorrowStr);
+            setSelectedDate(adTomorrowStr);
+        }
+    }, [dateOption]);
+
+    const [lastFetchedTodayPatients, setLastFetchedTodayPatients] = useState([]);
+
+    // When tomorrow is selected and no patients exist, auto-populate from today
+    useEffect(() => {
+        if (dateOption === 'tomorrow' && user && selectedDate === adTomorrowStr) {
+            const checkAndPrefill = async () => {
+                setFetchingPatients(true);
+                try {
+                    const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
+                    // Check if patients exist for tomorrow
+                    const resTomorrow = await axios.get(`${API_BASE_URL}/patients/${adTomorrowStr}`, config);
+                    if (resTomorrow.data.patients && resTomorrow.data.patients.length > 0) {
+                        setPatientRows(resTomorrow.data.patients);
+                    } else {
+                        // Use the latest fetched today patients from state
+                        const prefill = (lastFetchedTodayPatients || [])
+                            .filter(row => row.isActive !== false && row.bedNo && row.ipdNumber && row.name && row.age)
+                            .map(row => ({
+                                bedNo: row.bedNo,
+                                ipdNumber: row.ipdNumber,
+                                name: row.name,
+                                age: row.age,
+                                status: 'admit',
+                            }));
+                        setPatientRows(prefill.length > 0 ? prefill : [{}]);
+                    }
+                } catch (error) {
+                    setPatientRows([{}]);
+                } finally {
+                    setFetchingPatients(false);
+                }
+            };
+            checkAndPrefill();
+        }
+    }, [dateOption, user, selectedDate, adTodayStr, adTomorrowStr, API_BASE_URL, lastFetchedTodayPatients]);
 
     // Function to convert Nepali to English date with corrected month mappings
     const convertBSToAD = (bsDate) => {
@@ -88,10 +159,17 @@ const UserDashboard = () => {
             const existingPatients = res.data.patients;
             
             setPatientRows(existingPatients.length > 0 ? existingPatients : [{}, {}]);
+            // If fetching for today, update lastFetchedTodayPatients
+            if (selectedDate === adTodayStr) {
+                setLastFetchedTodayPatients(existingPatients);
+            }
         } catch (error) {
             console.error("Error fetching patient data:", error.response?.data?.message || error.message);
             showToast(error.response?.data?.message || 'Error fetching patient data.');
             setPatientRows([{}, {}]);
+            if (selectedDate === adTodayStr) {
+                setLastFetchedTodayPatients([]);
+            }
         } finally {
             setFetchingPatients(false);
         }
@@ -105,6 +183,7 @@ const UserDashboard = () => {
         }
     }, [selectedDate]);
 
+    // After saving or discharging, always fetch the latest data from backend
     const handleSave = async () => {
         const filledRows = patientRows.filter(row => row.bedNo && row.name && row.age);
         
@@ -126,7 +205,7 @@ const UserDashboard = () => {
             const patientsWithStatus = filledRows.map(patient => ({
                 ...patient,
                 status: patient.status || 'active',
-                isActive: patient.status !== 'inactive'
+                // Do not overwrite isActive; preserve as set in the row
             }));
 
             await axios.post(`${API_BASE_URL}/patients`, {
@@ -134,7 +213,7 @@ const UserDashboard = () => {
                 patients: patientsWithStatus
             }, config);
             
-            setPatientRows(filledRows);
+            await fetchPatients(); // Always refresh from backend after save
             showToast('Patient data saved successfully!', 'success');
         } catch (error) {
             console.error('Error saving patient data:', error.response?.data?.message || error.message);
@@ -161,8 +240,7 @@ const UserDashboard = () => {
 
             showToast(`Patient ${isActive ? 'activated' : 'discharged'} successfully!`, 'success');
             
-            // Refresh the patient list to reflect changes
-            fetchPatients();
+            await fetchPatients(); // Always refresh from backend after discharge
         } catch (error) {
             console.error('Error updating patient status:', error.response?.data?.message || error.message);
             showToast(error.response?.data?.message || 'Error updating patient status', 'error');
@@ -192,10 +270,12 @@ const UserDashboard = () => {
             } else {
                 // Set to discharged if any diet selected
                 row.status = 'discharged';
+                row.isActive = false;
             }
         } else if (row.status === 'discharged') {
             // Set back to admit, keep diets
             row.status = 'admit';
+            row.isActive = true;
         }
         setPatientRows(newRows);
     };
@@ -257,11 +337,24 @@ const UserDashboard = () => {
 
             <div className="dashboard-main-content">
                 <div className="dashboard-center-titles">
-                    <h1 className="dashboard-hospital-title">कोशी अस्पताल, विराटनगर</h1>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.2rem', gap: 12 }}>
+                        <img src={NepaliEmblem} alt="Nepali Emblem" style={{ height: 48, width: 'auto' }} />
+                        <h1 className="dashboard-hospital-title" style={{ margin: '0 16px', color: '#b71c1c', fontWeight: 700, fontSize: '2.5rem', textAlign: 'center', letterSpacing: 1 }}>
+                            कोशी अस्पताल, विराटनगर
+                        </h1>
+                        <img src={NepaliFlag} alt="Nepali Flag" style={{ height: 36, width: 'auto' }} />
+                    </div>
                     <h2 className="dashboard-form-title">बिरामीहरुको डाईट फारम</h2>
                 </div>
                 <div className="dashboard-ward-date-row">
-                    <div className="dashboard-ward">Ward: <span className="dashboard-ward-value">{user.department?.charAt(0).toUpperCase() + user.department?.slice(1)}</span></div>                    <div className="dashboard-date">Date: <span className="dashboard-date-value">{nepaliDate}</span></div>
+                    <div className="dashboard-ward">Ward: <span className="dashboard-ward-value">{user.department?.charAt(0).toUpperCase() + user.department?.slice(1)}</span></div>
+                    <div className="dashboard-date">
+                        Date: 
+                        <select value={dateOption} onChange={e => setDateOption(e.target.value)} style={{ fontWeight: 700, color: '#2563eb', fontSize: 18, border: 'none', background: 'transparent', outline: 'none', cursor: 'pointer' }}>
+                            <option value="today">{bsTodayStr}</option>
+                            <option value="tomorrow">{bsTomorrowStr}</option>
+                        </select>
+                    </div>
                 </div>
 
                 {/* Removed dashboard-filter-row and button */}
@@ -270,44 +363,48 @@ const UserDashboard = () => {
                     <table className="patient-table">
                         <thead>
                             <tr>
-                                <th rowSpan="2" className="diet-stack">Bed<br/>No.</th>
-                                <th rowSpan="2" className="diet-stack">IPD<br/>No.</th>
-                                <th rowSpan="2" className="diet-stack">Patient<br/>name</th>
-                                <th rowSpan="2" className="dark-border">Age</th>
-                                <th colSpan="4">Tomorrow's Morning meal</th>
-                                <th colSpan="3">Any one</th>
-                                <th colSpan="2">Snacks</th>
-                                <th colSpan="5">Night Meal (any one)</th>
-                                <th colSpan="3">Any one</th>
-                                <th rowSpan="2" className="diet-stack">Status</th>
+                                <th rowSpan="2" className="diet-stack" style={{ ...groupSeparatorLeftStyle, borderRight: '3px solid #374151', borderTop: '3px solid #374151' }}>Bed<br/>No.</th>
+                                <th rowSpan="2" className="diet-stack" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151' }}>IPD<br/>No.</th>
+                                <th rowSpan="2" className="diet-stack" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151' }}>Patient<br/>name</th>
+                                <th rowSpan="2" className="dark-border" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151' }}>Age</th>
+                                <th colSpan="4" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151' }}>Morning meal</th>
+                                <th colSpan="3" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151' }}>Any one</th>
+                                <th colSpan="2" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151' }}>Snacks</th>
+                                <th colSpan="5" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151' }}>Night Meal (any one)</th>
+                                <th colSpan="3" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151' }}>Any one</th>
+                                <th rowSpan="2" className="diet-stack" style={{ ...groupSeparatorRightStyle, borderTop: '3px solid #374151' }}>Status</th>
                             </tr>
                             <tr>
                                 <th className="light-border diet-stack">Normal<br/>diet</th>
                                 <th className="light-border diet-stack under12-col">Under<br/>12<br/>years<br/>diet</th>
                                 <th className="light-border diet-stack">Soft<br/>diet</th>
-                                <th className="dark-border diet-stack">Liquid<br/>diet</th>
+                                <th className="dark-border diet-stack" style={{ borderRight: '3px solid #374151' }}>Liquid<br/>diet</th>
                                 <th className="light-border">Egg</th>
                                 <th className="dark-border">Milk</th>
-                                <th className="light-border">High protein</th>
+                                <th className="light-border" style={{ borderRight: '3px solid #374151' }}>High protein</th>
                                 <th className="light-border">Biscuit</th>
-                                <th className="dark-border">Satu</th>
+                                <th className="dark-border" style={{ borderRight: '3px solid #374151' }}>Satu</th>
                                 <th className="light-border diet-stack">Normal<br/>diet</th>
                                 <th className="light-border diet-stack under12-col">Under<br/>12<br/>years<br/>diet</th>
                                 <th className="light-border diet-stack">Soft<br/>diet</th>
                                 <th className="light-border diet-stack">Liquid<br/>diet</th>
-                                <th className="dark-border diet-stack chapati-col">Chapati<br/>diet</th>
+                                <th className="dark-border diet-stack chapati-col" style={{ borderRight: '3px solid #374151' }}>Chapati<br/>diet</th>
                                 <th className="light-border">Egg</th>
-                                <th>Milk</th>
-                                <th className="light-border">High protein</th>
+                                <th className="light-border">Milk</th>
+                                <th className="light-border" style={{ borderRight: '3px solid #374151' }}>High protein</th>
                             </tr>
                         </thead>
                         <tbody>
                             {patientRows
-                                // Removed .filter(row => showDischarged || row.status !== 'inactive')
-                                .filter(row => row.status !== 'inactive')
+                                // Do not filter out discharged patients; show all
                                 .map((row, rowIdx) => (
-                                <tr key={rowIdx} className={row.status === 'inactive' ? 'discharged-patient' : ''}>
-                                    <td className="table-cell">
+                                <tr key={rowIdx} className={row.isActive === false ? 'discharged-patient' : ''}>
+                                    <td className="table-cell" style={{
+                                        ...groupSeparatorLeftStyle,
+                                        borderRight: '3px solid #374151',
+                                        borderTop: '3px solid #374151',
+                                        ...(rowIdx === patientRows.length - 1 ? { borderBottom: '3px solid #374151' } : {})
+                                    }}>
                                         <input 
                                             className="table-input table-input-small" 
                                             type="text" 
@@ -315,29 +412,41 @@ const UserDashboard = () => {
                                             onChange={(e) => handleInputChange(rowIdx, 'bedNo', e.target.value)}
                                             maxLength={4}
                                             style={{ width: '60px' }}
-                                            disabled={row.status === 'inactive'}
+                                            disabled={row.isActive === false}
                                         />
                                     </td>
-                                    <td className="table-cell">
+                                    <td className="table-cell" style={{
+                                        borderRight: '3px solid #374151',
+                                        borderTop: '3px solid #374151',
+                                        ...(rowIdx === patientRows.length - 1 ? { borderBottom: '3px solid #374151' } : {})
+                                    }}>
                                         <input 
                                             className="table-input table-input-small" 
                                             type="text" 
                                             value={row.ipdNumber || ''}
                                             onChange={(e) => handleInputChange(rowIdx, 'ipdNumber', e.target.value)}
                                             style={{ width: '80px' }}
-                                            disabled={row.status === 'inactive'}
+                                            disabled={row.isActive === false}
                                         />
                                     </td>
-                                    <td className="table-cell">
+                                    <td className="table-cell" style={{
+                                        borderRight: '3px solid #374151',
+                                        borderTop: '3px solid #374151',
+                                        ...(rowIdx === patientRows.length - 1 ? { borderBottom: '3px solid #374151' } : {})
+                                    }}>
                                         <input 
                                             className="table-input table-input-patient-name" 
                                             type="text" 
                                             value={row.name || ''}
                                             onChange={(e) => handleInputChange(rowIdx, 'name', e.target.value)}
-                                            disabled={row.status === 'inactive'}
+                                            disabled={row.isActive === false}
                                         />
                                     </td>
-                                    <td className="table-cell dark-border">
+                                    <td className="table-cell dark-border" style={{
+                                        borderRight: '3px solid #374151',
+                                        borderTop: '3px solid #374151',
+                                        ...(rowIdx === patientRows.length - 1 ? { borderBottom: '3px solid #374151' } : {})
+                                    }}>
                                         <input 
                                             className="table-input table-input-small" 
                                             type="number" 
@@ -347,12 +456,20 @@ const UserDashboard = () => {
                                             onChange={(e) => handleInputChange(rowIdx, 'age', e.target.value)}
                                             maxLength={3}
                                             style={{ width: '50px' }}
-                                            disabled={row.status === 'inactive'}
+                                            disabled={row.isActive === false}
                                         />
                                     </td>
-                                    {/* Tomorrow's Morning meal options */}
+                                    {/* Morning meal options */}
                                     {['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet'].map((opt, i) => (
-                                        <td className={`table-cell diet-cell${i < 3 ? ' light-border' : ' dark-border'}${opt === 'Under 12 years diet' ? ' under12-col' : ''}`} key={`morningMeal-${i}`}>
+                                        <td
+                                            className={`table-cell diet-cell${i < 3 ? ' light-border' : ' dark-border'}${opt === 'Under 12 years diet' ? ' under12-col' : ''}`}
+                                            key={`morningMeal-${i}`}
+                                            style={{
+                                                borderTop: '3px solid #374151',
+                                                ...(rowIdx === patientRows.length - 1 ? { borderBottom: '3px solid #374151' } : {}),
+                                                ...(i === 3 ? { borderRight: '3px solid #374151' } : {})
+                                            }}
+                                        >
                                             <span 
                                                 className={`diet-box ${row.morningMeal === opt ? 'selected' : ''}`}
                                                 onClick={() => handleInputChange(rowIdx, 'morningMeal', opt)}
@@ -362,9 +479,17 @@ const UserDashboard = () => {
                                             />
                                         </td>
                                     ))}
-                                    {/* Morning Extra options */}
+                                    {/* Morning Extra options (Any one) */}
                                     {['Egg', 'Milk', 'High protein'].map((opt, i) => (
-                                        <td className={`table-cell diet-cell${i === 0 ? ' light-border' : i === 1 ? ' dark-border' : ' light-border'}`} key={`morningExtra-${i}`}>
+                                        <td
+                                            className={`table-cell diet-cell${i === 0 ? ' light-border' : i === 1 ? ' dark-border' : ' light-border'}`}
+                                            key={`morningExtra-${i}`}
+                                            style={{
+                                                borderTop: '3px solid #374151',
+                                                ...(rowIdx === patientRows.length - 1 ? { borderBottom: '3px solid #374151' } : {}),
+                                                ...(i === 2 ? { borderRight: '3px solid #374151' } : {})
+                                            }}
+                                        >
                                             <span 
                                                 className={`diet-box ${row.morningExtra === opt ? 'selected' : ''}`}
                                                 onClick={() => handleInputChange(rowIdx, 'morningExtra', opt)}
@@ -376,7 +501,15 @@ const UserDashboard = () => {
                                     ))}
                                     {/* Snacks options */}
                                     {['Biscuit', 'Satu'].map((opt, i) => (
-                                        <td className={`table-cell diet-cell${i === 0 ? ' light-border biscuit-col' : ' dark-border'}`} key={`launch-${i}`}>
+                                        <td
+                                            className={`table-cell diet-cell${i === 0 ? ' light-border biscuit-col' : ' dark-border'}`}
+                                            key={`launch-${i}`}
+                                            style={{
+                                                borderTop: '3px solid #374151',
+                                                ...(rowIdx === patientRows.length - 1 ? { borderBottom: '3px solid #374151' } : {}),
+                                                ...(i === 1 ? { borderRight: '3px solid #374151' } : {})
+                                            }}
+                                        >
                                             <span 
                                                 className={`diet-box ${row.launch === opt ? 'selected' : ''}`}
                                                 onClick={() => handleInputChange(rowIdx, 'launch', opt)}
@@ -388,7 +521,12 @@ const UserDashboard = () => {
                                     ))}
                                     {/* Night Meal options */}
                                     {['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet', 'Chapati diet'].map((opt, i) => (
-                                        <td className={`table-cell diet-cell${i < 4 ? ' light-border' : ' dark-border'}${opt === 'Under 12 years diet' ? ' under12-col' : ''}${opt === 'Chapati diet' ? ' chapati-col' : ''}`} key={`nightMeal-${i}`}>
+                                        <td className={`table-cell diet-cell${i < 4 ? ' light-border' : ' dark-border'}${opt === 'Under 12 years diet' ? ' under12-col' : ''}${opt === 'Chapati diet' ? ' chapati-col' : ''}`} key={`nightMeal-${i}`}
+                                            style={{
+                                                borderTop: '3px solid #374151',
+                                                ...(rowIdx === patientRows.length - 1 ? { borderBottom: '3px solid #374151' } : {}),
+                                                ...(i === 4 ? { borderRight: '3px solid #374151' } : {})
+                                            }}>
                                             <span 
                                                 className={`diet-box ${row.nightMeal === opt ? 'selected' : ''}`}
                                                 onClick={() => handleInputChange(rowIdx, 'nightMeal', opt)}
@@ -398,9 +536,14 @@ const UserDashboard = () => {
                                             />
                                         </td>
                                     ))}
-                                    {/* Night Extra options */}
+                                    {/* Night Extra options (Any one) */}
                                     {['Egg', 'Milk', 'High protein'].map((opt, i) => (
-                                        <td className={`table-cell diet-cell${i === 0 ? ' light-border' : i === 1 ? '' : ' light-border'}`} key={`nightExtra-${i}`}>
+                                        <td className={`table-cell diet-cell${i === 0 ? ' light-border' : i === 1 ? '' : ' light-border'}`} key={`nightExtra-${i}`}
+                                            style={{
+                                                borderTop: '3px solid #374151',
+                                                ...(rowIdx === patientRows.length - 1 ? { borderBottom: '3px solid #374151' } : {}),
+                                                ...(i === 2 ? { borderRight: '3px solid #374151' } : {})
+                                            }}>
                                             <span 
                                                 className={`diet-box ${row.nightExtra === opt ? 'selected' : ''}`}
                                                 onClick={() => handleInputChange(rowIdx, 'nightExtra', opt)}
@@ -411,14 +554,27 @@ const UserDashboard = () => {
                                         </td>
                                     ))}
                                     {/* Status column */}
-                                    <td className="table-cell diet-cell">
+                                    <td className="table-cell diet-cell" style={{
+                                        ...groupSeparatorStyle,
+                                        ...groupSeparatorRightStyle,
+                                        borderTop: '3px solid #374151',
+                                        ...(rowIdx === patientRows.length - 1 ? { borderBottom: '3px solid #374151' } : {})
+                                    }}>
                                         {row.bedNo && row.ipdNumber ? (
                                             <button
-                                                className={`button table-input-small ${row.status === 'discharged' ? 'button-success' : 'button-danger'}`}
+                                                className={`button table-input-small ${row.isActive === false ? 'button-success' : 'button-danger'}`}
                                                 onClick={() => handleStatusButtonClick(rowIdx)}
-                                                style={{ fontSize: '1rem', padding: '0.3rem 1.6rem', fontWeight: 700, cursor: 'pointer', minWidth: '140px' }}
+                                                style={{
+                                                    fontSize: '1rem',
+                                                    padding: '0.3rem 1.6rem',
+                                                    fontWeight: 700,
+                                                    cursor: 'pointer',
+                                                    minWidth: '140px',
+                                                    backgroundColor: row.isActive === false ? '#22c55e' : undefined,
+                                                    color: row.isActive === false ? '#166534' : undefined
+                                                }}
                                             >
-                                                {row.status === 'discharged' ? 'Discharged' : 'Admitted'}
+                                                {row.isActive === false ? 'Discharged' : 'Admitted'}
                                             </button>
                                         ) : (
                                             <span className="table-input-small" style={{ color: '#999' }}>N/A</span>

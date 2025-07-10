@@ -135,10 +135,8 @@ router.get('/:date', protect, async (req, res) => {
                 return res.status(200).json({ patients: [] }); // No previous records
             }
         }
-        
-        // Filter out inactive patients for current date records
-        const activePatients = patientRecord.patients.filter(p => p.isActive !== false);
-        res.status(200).json({ patients: activePatients });
+        // Return all patients for current date (admitted and discharged)
+        res.status(200).json({ patients: patientRecord.patients });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server error fetching patient data' });
