@@ -344,3 +344,7 @@
     background: var(--gray-800);
   }
 } 
+
+.govt-koshi-title {
+  color: #111 !important;
+} 

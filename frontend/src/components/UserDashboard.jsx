@@ -60,39 +60,63 @@ const UserDashboard = () => {
 
     const [lastFetchedTodayPatients, setLastFetchedTodayPatients] = useState([]);
 
-    // When tomorrow is selected and no patients exist, auto-populate from today
+    // Helper to fetch admitted patients for a given date
+    const fetchAdmittedPatients = async (date) => {
+        const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
+        // Fetch the most recent previous record (including the date itself)
+        const res = await axios.get(`${API_BASE_URL}/patients/${date}?findPrevious=true`, config);
+        // Only include admitted (not discharged) patients
+        return (res.data.patients || []).filter(p => p.isActive !== false && p.bedNo && p.ipdNumber && p.name && p.age);
+    };
+
+    // Helper to fetch all patients for a given date (may include discharged)
+    const fetchAllPatients = async (date) => {
+        const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
+        const res = await axios.get(`${API_BASE_URL}/patients/${date}`, config);
+        return res.data.patients || [];
+    };
+
+    // When tomorrow is selected, always merge today's admitted patients into tomorrow's list
     useEffect(() => {
-        if (dateOption === 'tomorrow' && user && selectedDate === adTomorrowStr) {
-            const checkAndPrefill = async () => {
-                setFetchingPatients(true);
-                try {
-                    const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
-                    // Check if patients exist for tomorrow
-                    const resTomorrow = await axios.get(`${API_BASE_URL}/patients/${adTomorrowStr}`, config);
-                    if (resTomorrow.data.patients && resTomorrow.data.patients.length > 0) {
-                        setPatientRows(resTomorrow.data.patients);
-                    } else {
-                        // Use the latest fetched today patients from state
-                        const prefill = (lastFetchedTodayPatients || [])
-                            .filter(row => row.isActive !== false && row.bedNo && row.ipdNumber && row.name && row.age)
-                            .map(row => ({
-                                bedNo: row.bedNo,
-                                ipdNumber: row.ipdNumber,
-                                name: row.name,
-                                age: row.age,
-                                status: 'admit',
-                            }));
-                        setPatientRows(prefill.length > 0 ? prefill : [{}]);
+        const updateTomorrowRows = async () => {
+            setFetchingPatients(true);
+            try {
+                // 1. Fetch all admitted patients as of today
+                const admittedToday = await fetchAdmittedPatients(adTodayStr);
+                // 2. Fetch all patients for tomorrow (may include discharged)
+                const tomorrowPatients = await fetchAllPatients(adTomorrowStr);
+                // 3. Merge: ensure all admittedToday patients are present in tomorrow's list
+                const tomorrowKeys = new Set(tomorrowPatients.map(p => `${p.bedNo}|${p.ipdNumber}`));
+                const merged = [...tomorrowPatients];
+                admittedToday.forEach(p => {
+                    const key = `${p.bedNo}|${p.ipdNumber}`;
+                    if (!tomorrowKeys.has(key)) {
+                        merged.push({
+                            bedNo: p.bedNo,
+                            ipdNumber: p.ipdNumber,
+                            name: p.name,
+                            age: p.age,
+                            isActive: true,
+                            status: 'admit',
+                            morningMeal: null,
+                            morningExtra: null,
+                            launch: null,
+                            nightMeal: null,
+                            nightExtra: null
+                        });
                     }
-                } catch (error) {
-                    setPatientRows([{}]);
-                } finally {
-                    setFetchingPatients(false);
-                }
-            };
-            checkAndPrefill();
+                });
+                setPatientRows(merged.length > 0 ? merged : [{}]);
+            } catch (error) {
+                setPatientRows([{}]);
+            } finally {
+                setFetchingPatients(false);
+            }
+        };
+        if (dateOption === 'tomorrow' && user && selectedDate === adTomorrowStr) {
+            updateTomorrowRows();
         }
-    }, [dateOption, user, selectedDate, adTodayStr, adTomorrowStr, API_BASE_URL, lastFetchedTodayPatients]);
+    }, [dateOption, user, selectedDate, adTodayStr, adTomorrowStr, API_BASE_URL]);
 
     // Function to convert Nepali to English date with corrected month mappings
     const convertBSToAD = (bsDate) => {
@@ -337,12 +361,15 @@ const UserDashboard = () => {
 
             <div className="dashboard-main-content">
                 <div className="dashboard-center-titles">
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.2rem', gap: 12 }}>
-                        <img src={NepaliEmblem} alt="Nepali Emblem" style={{ height: 48, width: 'auto' }} />
-                        <h1 className="dashboard-hospital-title" style={{ margin: '0 16px', color: '#b71c1c', fontWeight: 700, fontSize: '2.5rem', textAlign: 'center', letterSpacing: 1 }}>
-                            कोशी अस्पताल, विराटनगर
-                        </h1>
-                        <img src={NepaliFlag} alt="Nepali Flag" style={{ height: 36, width: 'auto' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.2rem', gap: 32 }}>
+                        <img src={NepaliEmblem} alt="Nepali Emblem" style={{ height: '120px', width: 'auto' }} />
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.2 }}>
+                            <div style={{ fontSize: 16, color: '#b71c1c', fontWeight: 400 }}>नेपाल सरकार</div>
+                            <div style={{ fontSize: 16, color: '#b71c1c', fontWeight: 400 }}>स्वास्थ्य तथा जनसंख्या मन्त्रालय</div>
+                            <div style={{ fontSize: 28, color: '#111', fontWeight: 700, margin: '6px 0 0 0' }}>कोशी अस्पताल</div>
+                            <div style={{ fontSize: 16, color: '#b71c1c', fontWeight: 400 }}>विराटनगर, नेपाल</div>
+                        </div>
+                        <img src={NepaliFlag} alt="Nepali Flag" style={{ height: '120px', width: 'auto' }} />
                     </div>
                     <h2 className="dashboard-form-title">बिरामीहरुको डाईट फारम</h2>
                 </div>

@@ -111,7 +111,7 @@ const PatientRecordsView = ({ user, onClose }) => {
         return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     };
 
-    // Fetch patient data for selected date
+    // Fetch patient data for selected date, always merging in admitted patients from today (or most recent previous record)
     const fetchPatientData = async (date) => {
         setLoading(true);
         try {
@@ -120,13 +120,45 @@ const PatientRecordsView = ({ user, onClose }) => {
                     Authorization: `Bearer ${localStorage.getItem('token')}`,
                 },
             };
-            
             // Convert Nepali date to English date for API
             const formattedDate = convertBSToAD(date);
-            console.log('Converting date:', date, 'to:', formattedDate); // Debug log
-            
+            // Fetch patient data for the selected date
             const res = await axios.get(`${API_BASE_URL}/patients/${formattedDate}?userId=${user._id}`, config);
-            setPatientData(res.data.patients || []);
+            let patients = res.data.patients || [];
+
+            // Always fetch the most recent previous record (today or before)
+            // Find today's date in AD
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            const todayStr = `${yyyy}-${mm}-${dd}`;
+            // If the selected date is after today, use today; otherwise, use the selected date
+            const referenceDate = formattedDate > todayStr ? todayStr : formattedDate;
+            // Fetch the most recent previous record (including today)
+            const prevRes = await axios.get(`${API_BASE_URL}/patients/${referenceDate}?userId=${user._id}&findPrevious=true`, config);
+            const prevPatients = (prevRes.data.patients || []).filter(p => p.isActive !== false);
+            // Merge in any missing admitted patients from previous record
+            const existingKeys = new Set(patients.map(p => `${p.bedNo}|${p.ipdNumber}`));
+            prevPatients.forEach(prevPatient => {
+                const key = `${prevPatient.bedNo}|${prevPatient.ipdNumber}`;
+                if (!existingKeys.has(key)) {
+                    // Add missing admitted patient with empty diets
+                    patients.push({
+                        bedNo: prevPatient.bedNo,
+                        ipdNumber: prevPatient.ipdNumber,
+                        name: prevPatient.name,
+                        age: prevPatient.age,
+                        isActive: true,
+                        morningMeal: null,
+                        morningExtra: null,
+                        launch: null,
+                        nightMeal: null,
+                        nightExtra: null
+                    });
+                }
+            });
+            setPatientData(patients);
         } catch (error) {
             console.error("Error fetching patient data:", error);
             showToast(error.response?.data?.message || 'Error fetching patient data', 'error');
