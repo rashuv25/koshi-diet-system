@@ -155,7 +155,7 @@
   /* Simulate 90% zoom */
   transform: scale(0.9);
   transform-origin: top left;
-  margin-left: 2%;
+  margin-left: 0;
 }
 
 .dashboard-table-section::-webkit-scrollbar {
@@ -182,7 +182,7 @@
   /* Simulate 90% browser zoom for the table only */
   transform: scale(0.9);
   transform-origin: top left;
-  margin-left: 2%;
+  margin-left: 0;
 }
 
 .patient-table th, .patient-table td {
@@ -266,14 +266,13 @@
 }
 
 .diet-box.selected {
-  background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-  border-color: var(--primary-color);
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
-  transform: scale(1.1);
+  background: #2563eb !important;
+  border: 2px solid #2563eb !important;
+  box-shadow: none !important;
 }
 
 .diet-box.selected::before {
-  transform: translate(-50%, -50%) scale(1);
+  display: none !important;
 }
 
 .diet-box:hover {
@@ -544,4 +543,34 @@
 .admin-main-title {
   color: #111 !important;
   font-size: 1.5rem;
-} 
+}
+
+/* --- FORCE BLACK TEXT AND SOLID DIET BOXES FOR DAILY REPORT TABLE --- */
+.patient-table th, .patient-table td, .patient-table .diet-stack, .patient-table .table-cell-header {
+  color: #111 !important;
+}
+.patient-table th span, .patient-table td span {
+  color: #111 !important;
+}
+.diet-box.selected {
+  background: #2563eb !important;
+  border: 2px solid #2563eb !important;
+  box-shadow: none !important;
+}
+.diet-box.selected::before {
+  display: none !important;
+}
+
+/* --- FIX TABLE SHIFTING/CUT-OFF --- */
+.patient-table {
+  /* Remove transform and margin-left to prevent left cut-off */
+  transform: none !important;
+  transform-origin: unset !important;
+  margin-left: 0 !important;
+}
+.dashboard-table-section {
+  /* Remove transform and margin-left to prevent left cut-off */
+  transform: none !important;
+  transform-origin: unset !important;
+  margin-left: 0 !important;
+}

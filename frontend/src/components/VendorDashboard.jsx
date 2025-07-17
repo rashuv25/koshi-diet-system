@@ -7,79 +7,61 @@ import KoshiHospitalLogo from '../assets/koshi_hospital_logo.jpg';
 import NepaliEmblem from '../assets/nepali_emblem.png';
 import NepaliFlag from '../assets/nepal_flag.png';
 
-const wardNames = [
-  { label: 'Ortho', value: 'ortho' },
-  { label: 'Gyno', value: 'gyno' },
-  { label: 'Emergency', value: 'emergency' },
-  { label: 'Medical', value: 'medical' }
-];
+// Helper to generate date options (last 7, today, next 7)
+const getDateOptions = () => {
+  const options = [];
+  for (let i = -7; i <= 7; i++) {
+    const date = new Date();
+    date.setDate(date.getDate() + i);
+    const adStr = date.toISOString().split('T')[0];
+    const bs = new NepaliDate(date);
+    const bsStr = `${bs.getBS().year}/${String(bs.getBS().month + 1).padStart(2, '0')}/${String(bs.getBS().date).padStart(2, '0')}`;
+    options.push({ ad: adStr, bs: bsStr });
+  }
+  return options;
+};
 
 const VendorDashboard = () => {
   const { API_BASE_URL, showToast } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [users, setUsers] = useState([]); // All users with department
-  const [patientRecords, setPatientRecords] = useState([]); // All patient records for selected date
+  const [wards, setWards] = useState([]); // Dynamic wards
   const [wardPatients, setWardPatients] = useState({}); // { ward: [patients] }
-
-  // Date logic
-  const today = new Date();
-  const tomorrow = new Date();
-  tomorrow.setDate(today.getDate() + 1);
-  const bsToday = new NepaliDate(today);
-  const bsTomorrow = new NepaliDate(tomorrow);
-  const bsTodayStr = `${bsToday.getBS().year}/${String(bsToday.getBS().month + 1).padStart(2, '0')}/${String(bsToday.getBS().date).padStart(2, '0')}`;
-  const bsTomorrowStr = `${bsTomorrow.getBS().year}/${String(bsTomorrow.getBS().month + 1).padStart(2, '0')}/${String(bsTomorrow.getBS().date).padStart(2, '0')}`;
-  const adTodayStr = today.toISOString().split('T')[0];
-  const adTomorrowStr = tomorrow.toISOString().split('T')[0];
-
-  const [dateOption, setDateOption] = useState('today');
-  const [selectedDate, setSelectedDate] = useState(adTodayStr);
-  const [nepaliDate, setNepaliDate] = useState(bsTodayStr);
+  const [dateOptions] = useState(getDateOptions());
+  const [selectedDate, setSelectedDate] = useState(dateOptions[7].ad); // today is at index 7
 
   useEffect(() => {
-    if (dateOption === 'today') {
-      setNepaliDate(bsTodayStr);
-      setSelectedDate(adTodayStr);
-    } else {
-      setNepaliDate(bsTomorrowStr);
-      setSelectedDate(adTomorrowStr);
-    }
-  }, [dateOption, bsTodayStr, bsTomorrowStr, adTodayStr, adTomorrowStr]);
+    const fetchWards = async () => {
+      try {
+        const config = {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        };
+        const res = await axios.get(`${API_BASE_URL}/vendor/wards`, config);
+        setWards(res.data.wards || []);
+      } catch (error) {
+        showToast('Error loading wards', 'error');
+      }
+    };
+    fetchWards();
+  }, [API_BASE_URL, showToast]);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchPatients = async () => {
       setLoading(true);
       try {
         const config = {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         };
-        // Fetch all users (for vendor)
-        const usersRes = await axios.get(`${API_BASE_URL}/admin/users/all`, config);
-        setUsers(usersRes.data.users || []);
-        // Fetch all patient records for selected date
-        const recordsRes = await axios.get(`${API_BASE_URL}/patients?date=${selectedDate}&all=true`, config);
-        setPatientRecords(recordsRes.data.records || []);
-        // Group patients by ward
-        const wardMap = {};
-        for (const { userId, patients } of recordsRes.data.records || []) {
-          const user = usersRes.data.users.find(u => u._id === userId);
-          if (user && user.department) {
-            if (!wardMap[user.department]) wardMap[user.department] = [];
-            wardMap[user.department].push(...patients);
-          }
-        }
-        setWardPatients(wardMap);
+        const res = await axios.get(`${API_BASE_URL}/vendor/records/by-date?date=${selectedDate}`, config);
+        setWardPatients(res.data.grouped || {});
       } catch (error) {
-        showToast('Error loading data for vendor', 'error');
+        showToast('Error loading patient records', 'error');
       } finally {
         setLoading(false);
       }
     };
-    fetchData();
-    // eslint-disable-next-line
-  }, [selectedDate, API_BASE_URL]);
+    fetchPatients();
+  }, [API_BASE_URL, selectedDate, showToast]);
 
-  // Logout handler
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -90,7 +72,7 @@ const VendorDashboard = () => {
 
   return (
     <div className="dashboard-container" style={{
-      maxWidth: '100%', // was '1100px'
+      maxWidth: '100%',
       margin: '2rem auto',
       background: '#fff',
       borderRadius: '12px',
@@ -99,9 +81,7 @@ const VendorDashboard = () => {
       position: 'relative',
       minHeight: '80vh',
     }}>
-      {/* Koshi Hospital logo at far left */}
       <img src={KoshiHospitalLogo} alt="Koshi Hospital Logo" style={{ position: 'absolute', top: '2rem', left: '2rem', height: 80, width: 'auto', borderRadius: '50%', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', background: '#fff' }} />
-      {/* Logout button */}
       <button
         onClick={handleLogout}
         style={{
@@ -121,7 +101,6 @@ const VendorDashboard = () => {
       >
         Logout
       </button>
-      {/* Hospital/emblem/flag header row */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.2rem', gap: 32, marginTop: 24 }}>
         <img src={NepaliEmblem} alt="Nepali Emblem" style={{ height: '120px', width: 'auto' }} />
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.2 }}>
@@ -135,20 +114,20 @@ const VendorDashboard = () => {
       <h1 style={{ textAlign: 'center', margin: '1rem 0 0.5rem 0', color: '#2c3e50', fontWeight: 700, letterSpacing: '1px' }}>
         Vendor Dashboard
       </h1>
-      {/* Date at the top center with switcher */}
+      {/* Date dropdown */}
       <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '1.5rem', color: '#555' }}>
         <span style={{ marginRight: 16 }}>मिति (वि.सं.):</span>
-        <select value={dateOption} onChange={e => setDateOption(e.target.value)} style={{ fontWeight: 700, color: '#2563eb', fontSize: 18, border: 'none', background: 'transparent', outline: 'none', cursor: 'pointer' }}>
-          <option value="today">{bsTodayStr}</option>
-          <option value="tomorrow">{bsTomorrowStr}</option>
+        <select value={selectedDate} onChange={e => setSelectedDate(e.target.value)} style={{ fontWeight: 700, color: '#2563eb', fontSize: 18, border: 'none', background: 'transparent', outline: 'none', cursor: 'pointer' }}>
+          {dateOptions.map((opt, idx) => (
+            <option key={opt.ad} value={opt.ad}>{opt.bs}</option>
+          ))}
         </select>
       </div>
-      {/* Wards and tables will be rendered here */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
         {/* Render for each ward */}
-        {wardNames.map(({ label, value }) => (
-          <div key={value} style={{ background: '#f8f9fa', borderRadius: '8px', padding: '1.2rem 0.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-            <h2 style={{ marginBottom: '0.7rem', color: '#2980b9', fontWeight: 600, paddingLeft: '1rem' }}>{label} Ward</h2>
+        {wards.map((ward) => (
+          <div key={ward._id} style={{ background: '#f8f9fa', borderRadius: '8px', padding: '1.2rem 0.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+            <h2 style={{ marginBottom: '0.7rem', color: '#2980b9', fontWeight: 600, paddingLeft: '1rem' }}>{ward.name} Ward</h2>
             <div className="table-container">
               <table className="patient-table" style={{width: '100%', minWidth: '1300px', tableLayout: 'fixed', background: '#f6edff'}}>
                 <thead>
@@ -184,9 +163,9 @@ const VendorDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {wardPatients[value] && wardPatients[value].length > 0 ? (
-                    wardPatients[value].map((p, idx) => {
-                      const isLastRow = idx === wardPatients[value].length - 1;
+                  {wardPatients[ward.name] && wardPatients[ward.name].length > 0 ? (
+                    wardPatients[ward.name].map((p, idx) => {
+                      const isLastRow = idx === wardPatients[ward.name].length - 1;
                       return (
                         <tr key={idx} className="table-row">
                           <td className="table-cell" style={{ borderLeft: '3px solid #374151', borderRight: '3px solid #374151', borderTop: '3px solid #374151', ...(isLastRow ? { borderBottom: '3px solid #374151' } : {}) }}>{p.bedNo}</td>

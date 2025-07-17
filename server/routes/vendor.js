@@ -66,6 +66,30 @@ router.get('/records/today', protect, async (req, res) => {
   }
 });
 
+// Get all patient records for a specific date, grouped by ward (for vendor)
+router.get('/records/by-date', protect, async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) {
+      return res.status(400).json({ error: 'Date is required in query parameter' });
+    }
+    // Find all patient records for the given date
+    const records = await PatientRecord.find({ date }).populate('userId', 'department');
+    // Group patients by ward (use user.department if patient.ward is missing)
+    const grouped = {};
+    records.forEach(record => {
+      const ward = record.userId.department;
+      if (!grouped[ward]) grouped[ward] = [];
+      record.patients.forEach(patient => {
+        grouped[ward].push(patient);
+      });
+    });
+    res.json({ grouped });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get all wards (for vendor and admin)
 router.get('/wards', protect, async (req, res) => {
   try {

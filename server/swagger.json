@@ -6,7 +6,7 @@
     "description": "API documentation for the MERN Hospital Management App."
   },
   "servers": [
-    { "url": "http://202.51.3.49:8010/api" }
+    {  "url": "http://202.51.3.49:8010/api"  }
   ],
   "paths": {
     "/auth/login": {
