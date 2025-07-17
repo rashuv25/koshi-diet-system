@@ -154,8 +154,14 @@ router.post('/wards', protect, authorize('admin'), async (req, res) => {
 router.put('/wards/:id', protect, authorize('admin'), async (req, res) => {
   try {
     const { name } = req.body;
+    // Find the old ward name before updating
+    const oldWard = await Ward.findById(req.params.id);
+    if (!oldWard) return res.status(404).json({ message: 'Ward not found' });
+    const oldName = oldWard.name;
+    // Update the ward name
     const ward = await Ward.findByIdAndUpdate(req.params.id, { name }, { new: true });
-    if (!ward) return res.status(404).json({ message: 'Ward not found' });
+    // Update all users with the old department name to the new name
+    await require('../models/User').updateMany({ department: oldName }, { department: name });
     res.json({ message: 'Ward updated', ward });
   } catch (err) {
     res.status(500).json({ message: 'Error updating ward' });

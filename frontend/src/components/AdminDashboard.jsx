@@ -577,6 +577,103 @@ const AdminDashboard = () => {
         }
     };
 
+    // --- Daily Report Modal State ---
+    const [showDailyReportModal, setShowDailyReportModal] = useState(false);
+    const [dailyReportYear, setDailyReportYear] = useState(defaultYear);
+    const [dailyReportMonth, setDailyReportMonth] = useState(defaultMonth);
+    const [dailyReportDay, setDailyReportDay] = useState(String(bsToday.getBS().date).padStart(2, '0'));
+    const [dailyReportWard, setDailyReportWard] = useState('');
+    const [dailyReportLoading, setDailyReportLoading] = useState(false);
+    const [dailyReportRows, setDailyReportRows] = useState([]);
+
+    // --- Fetch Daily Report Data ---
+    const handleGenerateDailyReport = async () => {
+        setDailyReportLoading(true);
+        setDailyReportRows([]);
+        try {
+            // Convert BS date to AD
+            const bsDate = `${dailyReportYear}/${dailyReportMonth}/${dailyReportDay}`;
+            const nepaliDate = new NepaliDate(bsDate);
+            const adDate = nepaliDate.getAD();
+            const adDateString = `${adDate.year}-${String(adDate.month + 1).padStart(2, '0')}-${String(adDate.date).padStart(2, '0')}`;
+            const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
+            // Fetch all users in the selected ward
+            const usersRes = await axios.get(`${API_BASE_URL}/admin/users`, config);
+            const users = usersRes.data.users.filter(u => u.department === dailyReportWard);
+            let allPatients = [];
+            for (const u of users) {
+                // Fetch all records for this user for the selected date
+                const res = await axios.get(`${API_BASE_URL}/patients/user/${u._id}/range?start=${adDateString}&end=${adDateString}`, config);
+                const records = res.data.records || [];
+                for (const rec of records) {
+                    for (const patient of rec.patients) {
+                        allPatients.push({
+                            bedNo: patient.bedNo || '',
+                            ipdNumber: patient.ipdNumber || '',
+                            name: patient.name || '',
+                            age: patient.age || '',
+                            morningMeal: patient.morningMeal || '',
+                            morningExtra: patient.morningExtra || '',
+                            launch: patient.launch || '',
+                            nightMeal: patient.nightMeal || '',
+                            nightExtra: patient.nightExtra || ''
+                        });
+                    }
+                }
+            }
+            setDailyReportRows(allPatients);
+        } catch (err) {
+            showToast('Error fetching daily report data', 'error');
+            setDailyReportRows([]);
+        } finally {
+            setDailyReportLoading(false);
+        }
+    };
+
+    // --- Download Daily Report as PDF ---
+    const handleDownloadDailyReport = async () => {
+        if (!dailyReportRows.length) return;
+        const tableContainer = document.querySelector('.table-container');
+        if (!tableContainer) return;
+        const jsPDFModule = await import('jspdf');
+        const html2canvasModule = await import('html2canvas');
+        const jsPDF = jsPDFModule.default;
+        const html2canvas = html2canvasModule.default;
+        const doc = new jsPDF('l', 'pt', 'a4');
+        // Use html2canvas to render the table
+        await html2canvas(tableContainer, { scale: 2, backgroundColor: '#fff' }).then(canvas => {
+            const imgData = canvas.toDataURL('image/png');
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+            // Calculate image dimensions to fit page
+            const imgWidth = pageWidth - 40;
+            const imgHeight = canvas.height * (imgWidth / canvas.width);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(20);
+            doc.text('Daily Diet Report', pageWidth / 2, 40, { align: 'center' });
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Year: ${dailyReportYear}  Month: ${nepaliMonths.find(m => m.number === dailyReportMonth)?.name || ''}  Day: ${dailyReportDay}  Ward: ${dailyReportWard}`, pageWidth / 2, 60, { align: 'center' });
+            doc.addImage(imgData, 'PNG', 20, 80, imgWidth, imgHeight);
+            doc.save(`Daily_Diet_Report_${dailyReportYear}_${dailyReportMonth}_${dailyReportDay}_${dailyReportWard}.pdf`);
+        });
+    };
+
+    {/* --- DAILY REPORT TABLE STYLE OVERRIDES --- */}
+    <style>{`
+      .patient-table th, .patient-table td, .patient-table .diet-stack, .patient-table .table-cell-header {
+        color: #111 !important;
+      }
+      .patient-table th span, .patient-table td span {
+        color: #111 !important;
+      }
+      .diet-box.selected {
+        background: #2563eb !important;
+        border: 2px solid #2563eb !important;
+        box-shadow: none !important;
+      }
+    `}</style>
+
     // Conditional rendering for access control
     if (!user || user.role !== 'admin') {
         return (
@@ -756,10 +853,17 @@ const AdminDashboard = () => {
             <div style={{ textAlign: 'center', marginTop: '1rem', marginBottom: '2rem' }}>
                 <button
                     className="button button-primary"
-                    style={{ minWidth: 120, width: 'auto', display: 'inline-block' }}
+                    style={{ minWidth: 120, width: 'auto', display: 'inline-block', marginRight: 12 }}
                     onClick={() => setShowMonthlyDietReport(true)}
                 >
                     Generate Monthly Report
+                </button>
+                <button
+                    className="button button-primary"
+                    style={{ minWidth: 120, width: 'auto', display: 'inline-block' }}
+                    onClick={() => setShowDailyReportModal(true)}
+                >
+                    Generate Daily Report
                 </button>
             </div>
 
@@ -861,6 +965,169 @@ const AdminDashboard = () => {
                         )}
 
                         {monthlyReportLoading && (
+                            <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
+                                <Spinner />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Daily Report Modal */}
+            {showDailyReportModal && (
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div className="card" style={{ maxWidth: 1000, width: '95%', position: 'relative', maxHeight: '90vh', overflowY: 'auto', padding: '32px 24px 24px 24px' }}>
+                        <button 
+                            onClick={() => {
+                                setShowDailyReportModal(false);
+                                setDailyReportRows([]);
+                            }} 
+                            style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}
+                        >
+                            &times;
+                        </button>
+                        <h2 className="section-title" style={{ textAlign: 'center' }}>Daily Diet Report</h2>
+                        {/* Date and Ward Selection */}
+                        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                            <select value={dailyReportYear} onChange={e => setDailyReportYear(e.target.value)} style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}>
+                                <option value="2082">2082</option>
+                            </select>
+                            <select value={dailyReportMonth} onChange={e => setDailyReportMonth(e.target.value)} style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}>
+                                {nepaliMonths.map(m => (
+                                    <option key={m.number} value={m.number}>{m.name}</option>
+                                ))}
+                            </select>
+                            <select value={dailyReportDay} onChange={e => setDailyReportDay(e.target.value)} style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}>
+                                {[...Array(32).keys()].slice(1).map(d => (
+                                    <option key={d} value={String(d).padStart(2, '0')}>{d}</option>
+                                ))}
+                            </select>
+                            <select value={dailyReportWard} onChange={e => setDailyReportWard(e.target.value)} style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}>
+                                <option value="" disabled>Select Ward</option>
+                                {wards.map(w => (
+                                    <option key={w} value={w}>{w}</option>
+                                ))}
+                            </select>
+                            <button 
+                                className="button button-success"
+                                onClick={handleGenerateDailyReport}
+                                disabled={!dailyReportWard || dailyReportLoading}
+                            >
+                                {dailyReportLoading ? 'Generating...' : 'Generate'}
+                            </button>
+                            {dailyReportRows.length > 0 && !dailyReportLoading && (
+                                <button
+                                    className="button button-primary"
+                                    onClick={handleDownloadDailyReport}
+                                >
+                                    Download PDF
+                                </button>
+                            )}
+                        </div>
+                        {/* Report Table */}
+                        {dailyReportRows.length > 0 && (
+                            <div className="table-container" style={{ maxHeight: '400px', overflowX: 'auto', overflowY: 'auto' }}>
+                                <table className="patient-table" style={{ color: '#111', borderCollapse: 'separate', borderSpacing: 0, width: '100%' }}>
+                                    <thead style={{ color: '#111' }}>
+                                        <tr>
+                                            <th className="diet-stack" rowSpan="2" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', borderLeft: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Bed<br/>No.</th>
+                                            <th className="diet-stack" rowSpan="2" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 700 }}>IPD<br/>No.</th>
+                                            <th className="diet-stack" rowSpan="2" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Patient<br/>name</th>
+                                            <th rowSpan="2" className="dark-border" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Age</th>
+                                            <th colSpan="4" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151', color: '#111', background: '#fff', fontWeight: 700 }}>Morning meal</th>
+                                            <th colSpan="3" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151', color: '#111', background: '#fff', fontWeight: 700 }}>Any one</th>
+                                            <th colSpan="2" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151', color: '#111', background: '#fff', fontWeight: 700 }}>Snacks</th>
+                                            <th colSpan="5" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151', color: '#111', background: '#fff', fontWeight: 700 }}>Night Meal (any one)</th>
+                                            <th colSpan="3" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151', color: '#111', background: '#fff', fontWeight: 700 }}>Any one</th>
+                                        </tr>
+                                        <tr>
+                                            <th className="light-border diet-stack" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Normal<br/>diet</th>
+                                            <th className="light-border diet-stack under12-col" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Under 12<br/>years<br/>diet</th>
+                                            <th className="light-border diet-stack" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Soft<br/>diet</th>
+                                            <th className="dark-border diet-stack" style={{ color: '#111', borderRight: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Liquid<br/>diet</th>
+                                            <th className="light-border" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Egg</th>
+                                            <th className="dark-border" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Milk</th>
+                                            <th className="light-border" style={{ color: '#111', borderRight: '3px solid #374151', background: '#fff', fontWeight: 700 }}>High protein</th>
+                                            <th className="light-border" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Biscuit</th>
+                                            <th className="dark-border" style={{ color: '#111', borderRight: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Satu</th>
+                                            <th className="light-border diet-stack" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Normal<br/>diet</th>
+                                            <th className="light-border diet-stack under12-col" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Under 12<br/>years<br/>diet</th>
+                                            <th className="light-border diet-stack" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Soft<br/>diet</th>
+                                            <th className="light-border diet-stack" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Liquid<br/>diet</th>
+                                            <th className="dark-border diet-stack chapati-col" style={{ color: '#111', borderRight: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Chapati<br/>diet</th>
+                                            <th className="light-border" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Egg</th>
+                                            <th className="light-border" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Milk</th>
+                                            <th className="light-border" style={{ color: '#111', borderRight: '3px solid #374151', background: '#fff', fontWeight: 700 }}>High protein</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody style={{ color: '#111' }}>
+                                        {dailyReportRows.map((patient, idx) => (
+                                            <tr key={idx} style={{ color: '#111' }}>
+                                                <td className="table-cell" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', borderLeft: '3px solid #374151', background: '#fff', fontWeight: 500 }}>{patient.bedNo}</td>
+                                                <td className="table-cell" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500 }}>{patient.ipdNumber}</td>
+                                                <td className="table-cell" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500 }}>{patient.name}</td>
+                                                <td className="table-cell dark-border" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500 }}>{patient.age}</td>
+                                                {/* Morning meal */}
+                                                {['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet'].map((opt, i) => (
+                                                    <td
+                                                        className={`table-cell diet-cell${i < 3 ? ' light-border' : ' dark-border'}`}
+                                                        key={`morningMeal-${opt}`}
+                                                        style={{ color: '#111', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500, ...(i === 3 ? { borderRight: '3px solid #374151' } : {}) }}
+                                                    >
+                                                        <span className={`diet-box ${patient.morningMeal === opt ? 'selected' : ''}`} style={{ color: '#111', background: '#fff' }}></span>
+                                                    </td>
+                                                ))}
+                                                {/* Morning Extra */}
+                                                {['Egg', 'Milk', 'High protein'].map((opt, i) => (
+                                                    <td
+                                                        className={`table-cell diet-cell${i === 0 ? ' light-border' : i === 1 ? ' dark-border' : ' light-border'}`}
+                                                        key={`morningExtra-${opt}`}
+                                                        style={{ color: '#111', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500, ...(i === 2 ? { borderRight: '3px solid #374151' } : {}) }}
+                                                    >
+                                                        <span className={`diet-box ${patient.morningExtra === opt ? 'selected' : ''}`} style={{ color: '#111', background: '#fff' }}></span>
+                                                    </td>
+                                                ))}
+                                                {/* Snacks */}
+                                                {['Biscuit', 'Satu'].map((opt, i) => (
+                                                    <td
+                                                        className={`table-cell diet-cell${i === 0 ? ' light-border biscuit-col' : ' dark-border'}`}
+                                                        key={`launch-${opt}`}
+                                                        style={{ color: '#111', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500, ...(i === 1 ? { borderRight: '3px solid #374151' } : {}) }}
+                                                    >
+                                                        <span className={`diet-box ${patient.launch === opt ? 'selected' : ''}`} style={{ color: '#111', background: '#fff' }}></span>
+                                                    </td>
+                                                ))}
+                                                {/* Night Meal */}
+                                                {['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet', 'Chapati diet'].map((opt, i) => (
+                                                    <td
+                                                        className={`table-cell diet-cell${i < 4 ? ' light-border' : ' dark-border'}${opt === 'Under 12 years diet' ? ' under12-col' : ''}${opt === 'Chapati diet' ? ' chapati-col' : ''}`}
+                                                        key={`nightMeal-${opt}`}
+                                                        style={{ color: '#111', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500, ...(i === 4 ? { borderRight: '3px solid #374151' } : {}) }}
+                                                    >
+                                                        <span className={`diet-box ${patient.nightMeal === opt ? 'selected' : ''}`} style={{ color: '#111', background: '#fff' }}></span>
+                                                    </td>
+                                                ))}
+                                                {/* Night Extra */}
+                                                {['Egg', 'Milk', 'High protein'].map((opt, i) => (
+                                                    <td
+                                                        className={`table-cell diet-cell${i === 0 ? ' light-border' : i === 1 ? '' : ' light-border'}`}
+                                                        key={`nightExtra-${opt}`}
+                                                        style={{ color: '#111', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500, ...(i === 2 ? { borderRight: '3px solid #374151' } : {}) }}
+                                                    >
+                                                        <span className={`diet-box ${patient.nightExtra === opt ? 'selected' : ''}`} style={{ color: '#111', background: '#fff' }}></span>
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                        {/* Add bottom border to the last row */}
+                                        <tr>
+                                            <td colSpan={24} style={{ borderBottom: '3px solid #374151', padding: 0, height: 0 }}></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                        {dailyReportLoading && (
                             <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
                                 <Spinner />
                             </div>
@@ -1001,7 +1268,7 @@ const AdminDashboard = () => {
                                     ))}
                                 </select>
                             </div>
-                            <button type="submit" className="button button-success" style={{ width: 200, alignSelf: 'center' }}>
+                                                       <button type="submit" className="button button-success" style={{ width: 200, alignSelf: 'center' }}>
                                 Save Changes
                             </button>
                         </form>
