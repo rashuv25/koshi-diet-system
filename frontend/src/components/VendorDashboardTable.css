@@ -1,0 +1,155 @@
+/*
+  VendorDashboardTable.css
+  Harmonize vendor dashboard table with admin/user dashboard styles.
+  (If you want to further tweak, edit this file.)
+*/
+
+/* Use the same table classes as admin/user dashboards */
+.patient-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 2px solid #222;
+  font-size: 14px;
+  background: #fff;
+  table-layout: fixed;
+}
+.patient-table th, .patient-table td {
+  border-right: 2px solid #222;
+  border-bottom: 2px solid #222;
+  border-top: none;
+  border-left: none;
+  background: #fff;
+  padding: 8px;
+  text-align: center;
+  font-size: 0.98rem;
+  vertical-align: middle;
+  word-break: break-word;
+}
+.patient-table th {
+  background-color: #f8f9fa;
+  color: #333;
+  font-weight: 600;
+  padding: 12px 8px;
+  text-align: center;
+  white-space: normal;
+}
+.patient-table th.diet-stack, .patient-table td.diet-stack {
+  min-width: 22px;
+  max-width: 28px;
+  padding: 0.18rem 0.08rem;
+  font-size: 0.78em;
+  word-break: break-word;
+}
+.patient-table th, .patient-table td {
+  min-width: 22px;
+  max-width: 90px;
+  word-break: break-word;
+}
+.patient-table th:last-child, .patient-table td:last-child {
+  border-right: 2px solid #222;
+}
+.patient-table tr:last-child td {
+  border-bottom: 2px solid #222;
+}
+.patient-table .light-border {
+  border-right: 1px solid #888;
+}
+.patient-table .dark-border {
+  border-right: 2px solid #222;
+}
+.patient-table .diet-cell {
+  padding: 8px;
+  text-align: center;
+}
+
+/* Diet box styling (same as admin/user) */
+.diet-box {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  text-align: center;
+  color: #6c63ff;
+  font-size: 14px;
+  cursor: pointer;
+  border: 2px solid #6c63ff;
+  border-radius: 3px;
+  position: relative;
+  margin: 0 auto;
+  background: #fff;
+  transition: background 0.2s, border 0.2s;
+}
+.diet-box.selected {
+  background-color: #6c63ff;
+  color: #fff;
+  border-color: #6c63ff;
+}
+.diet-box.selected::after {
+  content: '\2713';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.1em;
+  color: #fff;
+}
+
+/* Alternate row coloring for readability */
+.patient-table .table-row:nth-child(even) {
+  background: #f6f8fa;
+}
+.patient-table .table-row:nth-child(odd) {
+  background: #fff;
+}
+
+/* Responsive horizontal scroll for wide tables */
+.dashboard-table-section {
+  overflow-x: auto;
+  max-width: 100vw;
+}
+
+/* Fix: Remove extra space on right by ensuring no margin/padding on table container */
+.dashboard-table-section {
+  margin: 0;
+  padding: 0;
+}
+
+/* Fix: Prevent header text wrapping for key columns */
+.patient-table th, .patient-table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.patient-table th.diet-stack, .patient-table td.diet-stack {
+  white-space: normal;
+}
+
+/* Set minimum widths for key columns to prevent header text from splitting vertically */
+.patient-table th, .patient-table td {
+  min-width: 60px;
+}
+.patient-table th.diet-stack, .patient-table td.diet-stack {
+  min-width: 48px;
+  max-width: 80px;
+}
+.patient-table th:nth-child(3), .patient-table td:nth-child(3) {
+  min-width: 120px;
+  max-width: 180px;
+}
+.patient-table th:nth-child(4), .patient-table td:nth-child(4) {
+  min-width: 60px;
+  max-width: 80px;
+}
+
+/* Make sure table fills container and touches right border */
+.dashboard-table-section {
+  overflow-x: auto;
+  max-width: 100vw;
+  margin: 0;
+  padding: 0;
+}
+.patient-table {
+  width: 100%;
+  min-width: 1200px;
+  table-layout: fixed;
+}
