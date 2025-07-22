@@ -8,7 +8,9 @@ import PatientRecordsView from './PatientRecordsView';
 import UserRecordsWindow from './UserRecordsWindow';
 import KoshiHospitalLogo from '../assets/koshi_hospital_logo.jpg';
 import NepaliDate from 'nepali-date-converter';
+import 'jspdf-autotable';
 import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import './AdminDashboard.css';
 import SettingsLogo from '../assets/settings_logo.png';
 import NepaliEmblem from '../assets/nepali_emblem.png';
@@ -597,9 +599,12 @@ const AdminDashboard = () => {
             const adDate = nepaliDate.getAD();
             const adDateString = `${adDate.year}-${String(adDate.month + 1).padStart(2, '0')}-${String(adDate.date).padStart(2, '0')}`;
             const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
-            // Fetch all users in the selected ward
+            // Fetch all users
             const usersRes = await axios.get(`${API_BASE_URL}/admin/users`, config);
-            const users = usersRes.data.users.filter(u => u.department === dailyReportWard);
+            let users = usersRes.data.users;
+            if (dailyReportWard !== 'ALL_WARDS') {
+                users = users.filter(u => u.department === dailyReportWard);
+            }
             let allPatients = [];
             for (const u of users) {
                 // Fetch all records for this user for the selected date
@@ -608,6 +613,7 @@ const AdminDashboard = () => {
                 for (const rec of records) {
                     for (const patient of rec.patients) {
                         allPatients.push({
+                            ...(dailyReportWard === 'ALL_WARDS' ? { ward: u.department } : {}),
                             bedNo: patient.bedNo || '',
                             ipdNumber: patient.ipdNumber || '',
                             name: patient.name || '',
@@ -633,30 +639,241 @@ const AdminDashboard = () => {
     // --- Download Daily Report as PDF ---
     const handleDownloadDailyReport = async () => {
         if (!dailyReportRows.length) return;
-        const tableContainer = document.querySelector('.table-container');
-        if (!tableContainer) return;
-        const jsPDFModule = await import('jspdf');
-        const html2canvasModule = await import('html2canvas');
-        const jsPDF = jsPDFModule.default;
-        const html2canvas = html2canvasModule.default;
         const doc = new jsPDF('l', 'pt', 'a4');
-        // Use html2canvas to render the table
-        await html2canvas(tableContainer, { scale: 2, backgroundColor: '#fff' }).then(canvas => {
-            const imgData = canvas.toDataURL('image/png');
-            const pageWidth = doc.internal.pageSize.getWidth();
-            const pageHeight = doc.internal.pageSize.getHeight();
-            // Calculate image dimensions to fit page
-            const imgWidth = pageWidth - 40;
-            const imgHeight = canvas.height * (imgWidth / canvas.width);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(20);
-            doc.text('Daily Diet Report', pageWidth / 2, 40, { align: 'center' });
-            doc.setFontSize(12);
-            doc.setFont('helvetica', 'normal');
-            doc.text(`Year: ${dailyReportYear}  Month: ${nepaliMonths.find(m => m.number === dailyReportMonth)?.name || ''}  Day: ${dailyReportDay}  Ward: ${dailyReportWard}`, pageWidth / 2, 60, { align: 'center' });
-            doc.addImage(imgData, 'PNG', 20, 80, imgWidth, imgHeight);
-            doc.save(`Daily_Diet_Report_${dailyReportYear}_${dailyReportMonth}_${dailyReportDay}_${dailyReportWard}.pdf`);
-        });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const tick = 'selected';
+
+        // Title
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(20);
+        doc.text('Daily Diet Report', pageWidth / 2, 40, { align: 'center' });
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Year: ${dailyReportYear}  Month: ${nepaliMonths.find(m => m.number === dailyReportMonth)?.name || ''}  Day: ${dailyReportDay}`, pageWidth / 2, 60, { align: 'center' });
+        
+        if (dailyReportWard === 'ALL_WARDS') {
+            // Group patients by ward
+            const wardGroups = {};
+            dailyReportRows.forEach(patient => {
+                if (!wardGroups[patient.ward]) {
+                    wardGroups[patient.ward] = [];
+                }
+                wardGroups[patient.ward].push(patient);
+            });
+
+            let startY = 80;
+            // Process each ward separately
+            for (const ward of Object.keys(wardGroups).sort()) {
+                const patients = wardGroups[ward];
+                
+                // Add ward header
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(14);
+                doc.text(`Ward: ${ward}`, 40, startY);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(12);
+                startY += 20;
+                
+                // Two-row header for each ward
+                let head = [
+                    [
+                        { content: 'Bed No.', rowSpan: 2 },
+                        { content: 'IPD No.', rowSpan: 2 },
+                        { content: 'Name', rowSpan: 2 },
+                        { content: 'Age', rowSpan: 2 },
+                        { content: "Tomorrow's Morning Meal", colSpan: 4 },
+                        { content: 'Any one', colSpan: 3 },
+                        { content: 'Snacks', colSpan: 2 },
+                        { content: 'Night meal (any one)', colSpan: 5 },
+                        { content: 'Any one', colSpan: 3 }
+                    ],
+                    [
+                        '', '', '', '',
+                        'Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet',
+                        'Egg', 'Milk', 'High protein',
+                        'Biscuit', 'Satu',
+                        'Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet', 'Chapati diet',
+                        'Egg', 'Milk', 'High protein'
+                    ]
+                ];
+
+                const body = patients.map(row => [
+                    row.bedNo,
+                    row.ipdNumber,
+                    row.name,
+                    row.age,
+                    // Morning meal
+                    row.morningMeal === 'Normal diet' ? tick : '',
+                    row.morningMeal === 'Under 12 years diet' ? tick : '',
+                    row.morningMeal === 'Soft diet' ? tick : '',
+                    row.morningMeal === 'Liquid diet' ? tick : '',
+                    // Morning Extra
+                    row.morningExtra === 'Egg' ? tick : '',
+                    row.morningExtra === 'Milk' ? tick : '',
+                    row.morningExtra === 'High protein' ? tick : '',
+                    // Snacks
+                    row.launch === 'Biscuit' ? tick : '',
+                    row.launch === 'Satu' ? tick : '',
+                    // Night Meal
+                    row.nightMeal === 'Normal diet' ? tick : '',
+                    row.nightMeal === 'Under 12 years diet' ? tick : '',
+                    row.nightMeal === 'Soft diet' ? tick : '',
+                    row.nightMeal === 'Liquid diet' ? tick : '',
+                    row.nightMeal === 'Chapati diet' ? tick : '',
+                    // Night Extra
+                    row.nightExtra === 'Egg' ? tick : '',
+                    row.nightExtra === 'Milk' ? tick : '',
+                    row.nightExtra === 'High protein' ? tick : '',
+                ]);
+
+                autoTable(doc, {
+                    head,
+                    body,
+                    startY: startY,
+                    styles: { font: 'helvetica', fontSize: 10, cellPadding: 4, halign: 'center', valign: 'middle' },
+                    headStyles: { fillColor: [55, 65, 81], textColor: 255, fontStyle: 'bold', fontSize: 11, halign: 'center', valign: 'middle', lineWidth: 0.8, lineColor: [55, 65, 81] },
+                    alternateRowStyles: { fillColor: [245, 245, 245] },
+                    margin: { left: 20, right: 20 },
+                    tableWidth: 'auto',
+                    didDrawCell: function (data) {
+                        const boxSize = 14;
+                        // Column indices for dark borders
+                        const darkCols = [2, 3, 7, 10, 12, 17, 20];
+                        if (data.section === 'body' && darkCols.includes(data.column.index)) {
+                            doc.setDrawColor(55, 65, 81);
+                            doc.setLineWidth(0.8);
+                            doc.line(
+                                data.cell.x + data.cell.width,
+                                data.cell.y,
+                                data.cell.x + data.cell.width,
+                                data.cell.y + data.cell.height
+                            );
+                        }
+                        // Draw filled box for selected cells
+                        if (data.section === 'body' && data.column.index >= 4) {
+                            if (data.cell.raw === tick) {
+                                const x = data.cell.x + (data.cell.width - boxSize) / 2;
+                                const y = data.cell.y + (data.cell.height - boxSize) / 2;
+                                doc.setDrawColor(37, 99, 235); // blue border
+                                doc.setFillColor(37, 99, 235); // blue fill
+                                doc.rect(x, y, boxSize, boxSize, 'FD'); // filled + border
+                            }
+                        }
+                    },
+                    didParseCell: function (data) {
+                        // Hide text for filled cells
+                        if (data.section === 'body' && data.cell.raw === 'selected') {
+                            data.cell.text = '';
+                        }
+                    },
+                });
+
+                // Update startY for next ward's table
+                startY = doc.lastAutoTable.finalY + 40;
+
+                // Add a new page if we're close to the bottom
+                if (startY > doc.internal.pageSize.height - 100 && Object.keys(wardGroups).indexOf(ward) < Object.keys(wardGroups).length - 1) {
+                    doc.addPage();
+                    startY = 40;
+                }
+            }
+        } else {
+            // Single ward report
+            let head = [
+                [
+                    { content: 'Bed No.', rowSpan: 2 },
+                    { content: 'IPD No.', rowSpan: 2 },
+                    { content: 'Name', rowSpan: 2 },
+                    { content: 'Age', rowSpan: 2 },
+                    { content: "Tomorrow's Morning Meal", colSpan: 4 },
+                    { content: 'Any one', colSpan: 3 },
+                    { content: 'Snacks', colSpan: 2 },
+                    { content: 'Night meal (any one)', colSpan: 5 },
+                    { content: 'Any one', colSpan: 3 }
+                ],
+                [
+                    '', '', '', '',
+                    'Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet',
+                    'Egg', 'Milk', 'High protein',
+                    'Biscuit', 'Satu',
+                    'Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet', 'Chapati diet',
+                    'Egg', 'Milk', 'High protein'
+                ]
+            ];
+
+            const body = dailyReportRows.map(row => [
+                row.bedNo,
+                row.ipdNumber,
+                row.name,
+                row.age,
+                // Morning meal
+                row.morningMeal === 'Normal diet' ? tick : '',
+                row.morningMeal === 'Under 12 years diet' ? tick : '',
+                row.morningMeal === 'Soft diet' ? tick : '',
+                row.morningMeal === 'Liquid diet' ? tick : '',
+                // Morning Extra
+                row.morningExtra === 'Egg' ? tick : '',
+                row.morningExtra === 'Milk' ? tick : '',
+                row.morningExtra === 'High protein' ? tick : '',
+                // Snacks
+                row.launch === 'Biscuit' ? tick : '',
+                row.launch === 'Satu' ? tick : '',
+                // Night Meal
+                row.nightMeal === 'Normal diet' ? tick : '',
+                row.nightMeal === 'Under 12 years diet' ? tick : '',
+                row.nightMeal === 'Soft diet' ? tick : '',
+                row.nightMeal === 'Liquid diet' ? tick : '',
+                row.nightMeal === 'Chapati diet' ? tick : '',
+                // Night Extra
+                row.nightExtra === 'Egg' ? tick : '',
+                row.nightExtra === 'Milk' ? tick : '',
+                row.nightExtra === 'High protein' ? tick : '',
+            ]);
+
+            autoTable(doc, {
+                head,
+                body,
+                startY: 80,
+                styles: { font: 'helvetica', fontSize: 10, cellPadding: 4, halign: 'center', valign: 'middle' },
+                headStyles: { fillColor: [55, 65, 81], textColor: 255, fontStyle: 'bold', fontSize: 11, halign: 'center', valign: 'middle', lineWidth: 0.8, lineColor: [55, 65, 81] },
+                alternateRowStyles: { fillColor: [245, 245, 245] },
+                margin: { left: 20, right: 20 },
+                tableWidth: 'auto',
+                didDrawCell: function (data) {
+                    const boxSize = 14;
+                    // Column indices for dark borders
+                    const darkCols = [2, 3, 7, 10, 12, 17, 20];
+                    if (data.section === 'body' && darkCols.includes(data.column.index)) {
+                        doc.setDrawColor(55, 65, 81);
+                        doc.setLineWidth(0.8);
+                        doc.line(
+                            data.cell.x + data.cell.width,
+                            data.cell.y,
+                            data.cell.x + data.cell.width,
+                            data.cell.y + data.cell.height
+                        );
+                    }
+                    // Draw filled box for selected cells
+                    if (data.section === 'body' && data.column.index >= 4) {
+                        if (data.cell.raw === tick) {
+                            const x = data.cell.x + (data.cell.width - boxSize) / 2;
+                            const y = data.cell.y + (data.cell.height - boxSize) / 2;
+                            doc.setDrawColor(37, 99, 235); // blue border
+                            doc.setFillColor(37, 99, 235); // blue fill
+                            doc.rect(x, y, boxSize, boxSize, 'FD'); // filled + border
+                        }
+                    }
+                },
+                didParseCell: function (data) {
+                    // Hide text for filled cells
+                    if (data.section === 'body' && data.cell.raw === 'selected') {
+                        data.cell.text = '';
+                    }
+                },
+            });
+        }
+
+        doc.save(`Daily_Diet_Report_${dailyReportYear}_${dailyReportMonth}_${dailyReportDay}_${dailyReportWard}.pdf`);
     };
 
     {/* --- DAILY REPORT TABLE STYLE OVERRIDES --- */}
@@ -692,14 +909,13 @@ const AdminDashboard = () => {
     return (
         <div className="dashboard-container">
             {/* Header: logo left, logout right */}
-            <div className="header" style={{ alignItems: 'center', marginBottom: '1.5rem' }}>
-                <img src={KoshiHospitalLogo} alt="Koshi Hospital Logo" className="logo" style={{ marginRight: '1.5rem', marginBottom: 0 }} />
-                <div style={{ flex: 1 }}></div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+            <div className="dashboard-header-row">
+                <img src={KoshiHospitalLogo} alt="Koshi Hospital Logo" className="logo" />
+                <div className="dashboard-header-spacer"></div>
+                <div className="dashboard-header-actions">
                     <button
                         onClick={logout}
                         className="button button-danger dashboard-logout-btn"
-                        style={{ minWidth: 120, marginBottom: 4 }}
                     >
                         Logout
                     </button>
@@ -710,19 +926,19 @@ const AdminDashboard = () => {
             </div>
 
             {/* New hospital/emblem/flag header row */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.2rem', gap: 32 }}>
-                <img src={NepaliEmblem} alt="Nepali Emblem" style={{ height: '120px', width: 'auto' }} />
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.2 }}>
-                    <div style={{ fontSize: 16, color: '#b71c1c', fontWeight: 400 }}>नेपाल सरकार</div>
-                    <div style={{ fontSize: 16, color: '#b71c1c', fontWeight: 400 }}>स्वास्थ्य तथा जनसंख्या मन्त्रालय</div>
-                    <div style={{ fontSize: 28, color: '#111', fontWeight: 700, margin: '6px 0 0 0' }}>कोशी अस्पताल</div>
-                    <div style={{ fontSize: 16, color: '#b71c1c', fontWeight: 400 }}>विराटनगर, नेपाल</div>
+            <div className="dashboard-emblem-row">
+                <img src={NepaliEmblem} alt="Nepali Emblem" className="dashboard-emblem" />
+                <div className="dashboard-emblem-center">
+                    <div className="dashboard-emblem-govt">नेपाल सरकार</div>
+                    <div className="dashboard-emblem-govt">स्वास्थ्य तथा जनसंख्या मन्त्रालय</div>
+                    <div className="admin-main-title">कोशी अस्पताल</div>
+                    <div className="dashboard-emblem-govt">विराटनगर, नेपाल</div>
                 </div>
-                <img src={NepaliFlag} alt="Nepali Flag" style={{ height: '120px', width: 'auto' }} />
+                <img src={NepaliFlag} alt="Nepali Flag" className="dashboard-flag" />
             </div>
 
             {/* Centered main title */}
-            <h1 className="admin-main-title" style={{ marginTop: 0, marginBottom: '2rem', textAlign: 'center', color: '#111' }}>
+            <h1 className="admin-main-title dashboard-title-center">
                 Patient Diet System
             </h1>
 
@@ -1004,6 +1220,7 @@ const AdminDashboard = () => {
                             </select>
                             <select value={dailyReportWard} onChange={e => setDailyReportWard(e.target.value)} style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}>
                                 <option value="" disabled>Select Ward</option>
+                                <option value="ALL_WARDS">All Wards</option>
                                 {wards.map(w => (
                                     <option key={w} value={w}>{w}</option>
                                 ))}
