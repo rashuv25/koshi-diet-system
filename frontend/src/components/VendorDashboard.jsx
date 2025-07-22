@@ -21,13 +21,49 @@ const getDateOptions = () => {
   return options;
 };
 
+// Nepali months
+const nepaliMonths = [
+  { number: '01', name: 'Baisakh' },
+  { number: '02', name: 'Jestha' },
+  { number: '03', name: 'Ashar' },
+  { number: '04', name: 'Shrawan' },
+  { number: '05', name: 'Bhadra' },
+  { number: '06', name: 'Ashwin' },
+  { number: '07', name: 'Kartik' },
+  { number: '08', name: 'Mangsir' },
+  { number: '09', name: 'Poush' },
+  { number: '10', name: 'Magh' },
+  { number: '11', name: 'Falgun' },
+  { number: '12', name: 'Chaitra' }
+];
+
+const today = new Date();
+const bsToday = new NepaliDate(today);
+const defaultYear = String(bsToday.getBS().year);
+const defaultMonth = String(bsToday.getBS().month + 1).padStart(2, '0');
+const defaultDay = String(bsToday.getBS().date).padStart(2, '0');
+
 const VendorDashboard = () => {
   const { API_BASE_URL, showToast } = useAuth();
   const [loading, setLoading] = useState(true);
   const [wards, setWards] = useState([]); // Dynamic wards
   const [wardPatients, setWardPatients] = useState({}); // { ward: [patients] }
-  const [dateOptions] = useState(getDateOptions());
-  const [selectedDate, setSelectedDate] = useState(dateOptions[7].ad); // today is at index 7
+  // Date dropdown states
+  const [year, setYear] = useState(defaultYear);
+  const [month, setMonth] = useState(defaultMonth);
+  const [day, setDay] = useState(defaultDay);
+  // Compute AD date from BS
+  const getADDate = (y, m, d) => {
+    const bsDate = `${y}/${m}/${d}`;
+    const nepaliDate = new NepaliDate(bsDate);
+    const adDate = nepaliDate.getAD();
+    return `${adDate.year}-${String(adDate.month + 1).padStart(2, '0')}-${String(adDate.date).padStart(2, '0')}`;
+  };
+  const [selectedDate, setSelectedDate] = useState(getADDate(defaultYear, defaultMonth, defaultDay));
+
+  useEffect(() => {
+    setSelectedDate(getADDate(year, month, day));
+  }, [year, month, day]);
 
   useEffect(() => {
     const fetchWards = async () => {
@@ -71,55 +107,49 @@ const VendorDashboard = () => {
   if (loading) return <Spinner />;
 
   return (
-    <div className="dashboard-container" style={{
-      maxWidth: '100%',
-      margin: '2rem auto',
-      background: '#fff',
-      borderRadius: '12px',
-      boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-      padding: '2rem',
-      position: 'relative',
-      minHeight: '80vh',
-    }}>
-      <img src={KoshiHospitalLogo} alt="Koshi Hospital Logo" style={{ position: 'absolute', top: '2rem', left: '2rem', height: 80, width: 'auto', borderRadius: '50%', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', background: '#fff' }} />
-      <button
-        onClick={handleLogout}
-        style={{
-          position: 'absolute',
-          top: '2rem',
-          right: '2rem',
-          background: '#e74c3c',
-          color: '#fff',
-          border: 'none',
-          borderRadius: '6px',
-          padding: '0.5rem 1.2rem',
-          fontWeight: 'bold',
-          cursor: 'pointer',
-          fontSize: '1rem',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.07)'
-        }}
-      >
-        Logout
-      </button>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.2rem', gap: 32, marginTop: 24 }}>
-        <img src={NepaliEmblem} alt="Nepali Emblem" style={{ height: '120px', width: 'auto' }} />
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.2 }}>
-          <div style={{ fontSize: 16, color: '#b71c1c', fontWeight: 400 }}>नेपाल सरकार</div>
-          <div style={{ fontSize: 16, color: '#b71c1c', fontWeight: 400 }}>स्वास्थ्य तथा जनसंख्या मन्त्रालय</div>
-          <div style={{ fontSize: 28, color: '#111', fontWeight: 700, margin: '6px 0 0 0' }}>कोशी अस्पताल</div>
-          <div style={{ fontSize: 16, color: '#b71c1c', fontWeight: 400 }}>विराटनगर, नेपाल</div>
+    <div className="dashboard-container">
+      <div className="dashboard-header-row">
+        <img src={KoshiHospitalLogo} alt="Koshi Hospital Logo" className="logo" />
+        <div className="dashboard-header-spacer"></div>
+        <div className="dashboard-header-actions">
+          <button
+            onClick={handleLogout}
+            className="button button-danger dashboard-logout-btn"
+          >
+            Logout
+          </button>
         </div>
-        <img src={NepaliFlag} alt="Nepali Flag" style={{ height: '120px', width: 'auto' }} />
       </div>
-      <h1 style={{ textAlign: 'center', margin: '1rem 0 0.5rem 0', color: '#2c3e50', fontWeight: 700, letterSpacing: '1px' }}>
+      <div className="dashboard-emblem-row">
+        <img src={NepaliEmblem} alt="Nepali Emblem" className="dashboard-emblem" />
+        <div className="dashboard-emblem-center">
+          <div className="dashboard-emblem-govt">नेपाल सरकार</div>
+          <div className="dashboard-emblem-govt">स्वास्थ्य तथा जनसंख्या मन्त्रालय</div>
+          <div className="admin-main-title">कोशी अस्पताल</div>
+          <div className="dashboard-emblem-govt">विराटनगर, नेपाल</div>
+        </div>
+        <img src={NepaliFlag} alt="Nepali Flag" className="dashboard-flag" />
+      </div>
+      <h1 className="admin-main-title dashboard-title-center">
         Vendor Dashboard
       </h1>
-      {/* Date dropdown */}
-      <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '1.5rem', color: '#555' }}>
+      <div className="dashboard-date-row">
         <span style={{ marginRight: 16 }}>मिति (वि.सं.):</span>
-        <select value={selectedDate} onChange={e => setSelectedDate(e.target.value)} style={{ fontWeight: 700, color: '#2563eb', fontSize: 18, border: 'none', background: 'transparent', outline: 'none', cursor: 'pointer' }}>
-          {dateOptions.map((opt, idx) => (
-            <option key={opt.ad} value={opt.ad}>{opt.bs}</option>
+        <select value={year} onChange={e => setYear(e.target.value)} style={{ marginRight: 8 }}>
+          {/* Show a range of years around today */}
+          {[...Array(5).keys()].map(i => {
+            const y = String(Number(defaultYear) - 2 + i);
+            return <option key={y} value={y}>{y}</option>;
+          })}
+        </select>
+        <select value={month} onChange={e => setMonth(e.target.value)} style={{ marginRight: 8 }}>
+          {nepaliMonths.map(m => (
+            <option key={m.number} value={m.number}>{m.name}</option>
+          ))}
+        </select>
+        <select value={day} onChange={e => setDay(e.target.value)}>
+          {[...Array(32).keys()].slice(1).map(d => (
+            <option key={d} value={String(d).padStart(2, '0')}>{d}</option>
           ))}
         </select>
       </div>
@@ -128,8 +158,8 @@ const VendorDashboard = () => {
         {wards.map((ward) => (
           <div key={ward._id} style={{ background: '#f8f9fa', borderRadius: '8px', padding: '1.2rem 0.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
             <h2 style={{ marginBottom: '0.7rem', color: '#2980b9', fontWeight: 600, paddingLeft: '1rem' }}>{ward.name} Ward</h2>
-            <div className="table-container">
-              <table className="patient-table" style={{width: '100%', minWidth: '1300px', tableLayout: 'fixed', background: '#f6edff'}}>
+            <div className="table-responsive">
+              <table className="patient-table">
                 <thead>
                   <tr>
                     <th rowSpan="2" className="diet-stack" style={{ borderLeft: '3px solid #374151', borderRight: '3px solid #374151', borderTop: '3px solid #374151' }}>Bed No.</th>

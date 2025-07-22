@@ -152,9 +152,6 @@
   animation: scaleIn 0.6s ease-out 0.8s both;
   transition: all var(--transition-normal);
   box-sizing: border-box;
-  /* Simulate 90% zoom */
-  transform: scale(0.9);
-  transform-origin: top left;
   margin-left: 0;
 }
 
@@ -179,9 +176,6 @@
   box-shadow: var(--shadow-sm);
   table-layout: auto;
   box-sizing: border-box;
-  /* Simulate 90% browser zoom for the table only */
-  transform: scale(0.9);
-  transform-origin: top left;
   margin-left: 0;
 }
 
@@ -398,52 +392,115 @@
 }
 
 @media (max-width: 768px) {
-  .dashboard-header-logo {
-    padding: var(--spacing-4) 0 0 var(--spacing-4);
+  .dashboard-container {
+    padding: 0.5rem;
+    min-height: 100vh;
+    width: 100vw;
+    overflow-x: hidden;
   }
-  
+  .dashboard-header-logo, .header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    padding: 0.5rem 0 0.5rem 0.5rem !important;
+    min-height: unset;
+    gap: 0.5rem;
+  }
+  .logo {
+    width: 3rem !important;
+    height: 3rem !important;
+    margin-bottom: 0.5rem !important;
+  }
   .dashboard-main-content {
-    padding: var(--spacing-4) 0;
+    padding: 0.5rem 0 !important;
   }
-  
+  .dashboard-center-titles {
+    margin-bottom: 0.5rem !important;
+  }
+  .dashboard-hospital-title, .admin-main-title {
+    font-size: 1.1rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+  .dashboard-form-title {
+    font-size: 1rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+  .dashboard-ward-date-row {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    padding: 0.5rem !important;
+    max-width: 100vw !important;
+    border-radius: 0.5rem !important;
+  }
   .dashboard-table-section {
-    padding: var(--spacing-4);
-    margin: var(--spacing-4);
+    padding: 0.5rem !important;
+    border-radius: 0.5rem !important;
+    margin-top: 0.5rem !important;
+    box-shadow: none !important;
+    transform: none !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    overflow-x: auto !important;
   }
-  
-  .patient-table th, .patient-table td {
-    padding: var(--spacing-2);
-    font-size: var(--font-size-xs);
+  .patient-table, .styled-table {
+    font-size: 0.85rem !important;
+    min-width: 600px !important;
+    width: 100% !important;
+    overflow-x: auto !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    transform: none !important;
   }
-  
-  .diet-box {
-    width: 16px;
-    height: 16px;
+  .patient-table th, .patient-table td, .styled-table th, .styled-table td {
+    padding: 2px 2px !important;
+    font-size: 0.85rem !important;
   }
-  
-  .diet-box::before {
-    width: 6px;
-    height: 6px;
+  .admin-action-row {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+  .admin-action-btn, .dashboard-logout-btn {
+    font-size: 1rem !important;
+    padding: 0.5rem 1rem !important;
+    min-width: 100px !important;
+  }
+  .card {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    padding: 0.5rem !important;
+    border-radius: 0.5rem !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+  .table-responsive {
+    width: 100vw !important;
+    overflow-x: auto !important;
+  }
+  /* Adjust emblem/flag row */
+  .dashboard-center-titles > div[style*='align-items: center'] {
+    gap: 10px !important;
+    margin: 10px 0 10px 0 !important;
+  }
+  .dashboard-center-titles img[alt='Nepali Emblem'],
+  .dashboard-center-titles img[alt='Nepali Flag'] {
+    height: 40px !important;
   }
 }
 
-@media (max-width: 640px) {
-  .dashboard-hospital-title {
-    font-size: var(--font-size-2xl);
+@media (max-width: 400px) {
+  .dashboard-hospital-title, .admin-main-title, .dashboard-form-title {
+    font-size: 0.95rem !important;
   }
-  
-  .dashboard-form-title {
-    font-size: var(--font-size-base);
+  .logo {
+    width: 2rem !important;
+    height: 2rem !important;
   }
-  
-  .admin-action-row {
-    flex-direction: column;
+  .admin-action-btn, .dashboard-logout-btn {
+    font-size: 0.95rem !important;
+    padding: 0.4rem 0.7rem !important;
   }
-  
-  .admin-action-btn {
-    width: 100%;
-  }
-} 
+}
 
 /* Add or improve table styles for admin dashboard tables */
 
@@ -573,4 +630,116 @@
   transform: none !important;
   transform-origin: unset !important;
   margin-left: 0 !important;
+}
+
+.dashboard-header-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  width: 100%;
+}
+.dashboard-header-spacer {
+  flex: 1;
+}
+.dashboard-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.dashboard-emblem-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.2rem;
+  gap: 32px;
+}
+.dashboard-emblem {
+  height: 120px;
+  width: auto;
+}
+.dashboard-flag {
+  height: 120px;
+  width: auto;
+}
+.dashboard-emblem-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;
+}
+.dashboard-emblem-govt {
+  font-size: 16px;
+  color: #b71c1c;
+  font-weight: 400;
+}
+.dashboard-title-center {
+  margin-top: 0;
+  margin-bottom: 2rem;
+  text-align: center;
+  color: #111;
+}
+
+@media (max-width: 768px) {
+  .dashboard-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .dashboard-header-actions {
+    align-items: flex-start;
+  }
+  .dashboard-emblem-row {
+    gap: 10px;
+    margin-bottom: 0.5rem;
+  }
+  .dashboard-emblem, .dashboard-flag {
+    height: 40px;
+  }
+  .dashboard-emblem-govt {
+    font-size: 12px;
+  }
+  .dashboard-title-center {
+    font-size: 1.1rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+}
+@media (max-width: 400px) {
+  .dashboard-title-center {
+    font-size: 0.95rem !important;
+  }
+  .dashboard-emblem, .dashboard-flag {
+    height: 24px;
+  }
+}
+
+@media (max-width: 768px) {
+  html, body {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .dashboard-container {
+    padding: 1rem !important;
+    margin: 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    background: #f6fafd !important;
+    box-sizing: border-box !important;
+  }
+  .dashboard-table-section, .table-responsive {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow-x: auto !important;
+    box-sizing: border-box !important;
+  }
+  .patient-table, .styled-table {
+    min-width: 900px !important;
+    width: 100% !important;
+  }
 }

@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 8010;
 
 // Production CORS configuration
 const allowedOrigins = [
-  process.env.CORS_ORIGIN
+  process.env.CORS_ORIGIN,
 ];
 
 app.use(cors({

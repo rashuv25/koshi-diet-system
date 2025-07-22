@@ -8,7 +8,9 @@ import PatientRecordsView from './PatientRecordsView';
 import UserRecordsWindow from './UserRecordsWindow';
 import KoshiHospitalLogo from '../assets/koshi_hospital_logo.jpg';
 import NepaliDate from 'nepali-date-converter';
+import 'jspdf-autotable';
 import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import './AdminDashboard.css';
 import SettingsLogo from '../assets/settings_logo.png';
 import NepaliEmblem from '../assets/nepali_emblem.png';
@@ -597,17 +599,26 @@ const AdminDashboard = () => {
             const adDate = nepaliDate.getAD();
             const adDateString = `${adDate.year}-${String(adDate.month + 1).padStart(2, '0')}-${String(adDate.date).padStart(2, '0')}`;
             const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
-            // Fetch all users in the selected ward
+            // Fetch all users
             const usersRes = await axios.get(`${API_BASE_URL}/admin/users`, config);
-            const users = usersRes.data.users.filter(u => u.department === dailyReportWard);
-            let allPatients = [];
+            let users = usersRes.data.users;
+            if (dailyReportWard !== 'ALL_WARDS') {
+                users = users.filter(u => u.department === dailyReportWard);
+            }
+            const allPatients = [];
+            const processedIpdNumbers = new Set(); // Keep track of processed patients to avoid duplicates
+
             for (const u of users) {
                 // Fetch all records for this user for the selected date
                 const res = await axios.get(`${API_BASE_URL}/patients/user/${u._id}/range?start=${adDateString}&end=${adDateString}`, config);
                 const records = res.data.records || [];
                 for (const rec of records) {
                     for (const patient of rec.patients) {
+                        // Use IPD number as the unique key to prevent duplicates
+                        const ipdKey = patient.ipdNumber;
+                        if (ipdKey && !processedIpdNumbers.has(ipdKey)) {
                         allPatients.push({
+                            ...(dailyReportWard === 'ALL_WARDS' ? { ward: u.department } : {}),
                             bedNo: patient.bedNo || '',
                             ipdNumber: patient.ipdNumber || '',
                             name: patient.name || '',
@@ -618,6 +629,23 @@ const AdminDashboard = () => {
                             nightMeal: patient.nightMeal || '',
                             nightExtra: patient.nightExtra || ''
                         });
+                            processedIpdNumbers.add(ipdKey);
+                        } else if (!ipdKey) {
+                            // If there's no IPD number, add the patient record but warn about potential duplicates
+                            console.warn("Patient record without IPD number found, may cause duplicates:", patient);
+                            allPatients.push({
+                                ...(dailyReportWard === 'ALL_WARDS' ? { ward: u.department } : {}),
+                                bedNo: patient.bedNo || '',
+                                ipdNumber: '',
+                                name: patient.name || '',
+                                age: patient.age || '',
+                                morningMeal: patient.morningMeal || '',
+                                morningExtra: patient.morningExtra || '',
+                                launch: patient.launch || '',
+                                nightMeal: patient.nightMeal || '',
+                                nightExtra: patient.nightExtra || ''
+                            });
+                        }
                     }
                 }
             }
@@ -633,30 +661,200 @@ const AdminDashboard = () => {
     // --- Download Daily Report as PDF ---
     const handleDownloadDailyReport = async () => {
         if (!dailyReportRows.length) return;
-        const tableContainer = document.querySelector('.table-container');
-        if (!tableContainer) return;
-        const jsPDFModule = await import('jspdf');
-        const html2canvasModule = await import('html2canvas');
-        const jsPDF = jsPDFModule.default;
-        const html2canvas = html2canvasModule.default;
+
         const doc = new jsPDF('l', 'pt', 'a4');
-        // Use html2canvas to render the table
-        await html2canvas(tableContainer, { scale: 2, backgroundColor: '#fff' }).then(canvas => {
-            const imgData = canvas.toDataURL('image/png');
-            const pageWidth = doc.internal.pageSize.getWidth();
-            const pageHeight = doc.internal.pageSize.getHeight();
-            // Calculate image dimensions to fit page
-            const imgWidth = pageWidth - 40;
-            const imgHeight = canvas.height * (imgWidth / canvas.width);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(20);
-            doc.text('Daily Diet Report', pageWidth / 2, 40, { align: 'center' });
-            doc.setFontSize(12);
-            doc.setFont('helvetica', 'normal');
-            doc.text(`Year: ${dailyReportYear}  Month: ${nepaliMonths.find(m => m.number === dailyReportMonth)?.name || ''}  Day: ${dailyReportDay}  Ward: ${dailyReportWard}`, pageWidth / 2, 60, { align: 'center' });
-            doc.addImage(imgData, 'PNG', 20, 80, imgWidth, imgHeight);
-            doc.save(`Daily_Diet_Report_${dailyReportYear}_${dailyReportMonth}_${dailyReportDay}_${dailyReportWard}.pdf`);
-        });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const tick = 'selected'; // Represents a selected diet, you can change this
+
+        // --- PDF styles ---
+        const darkColor = '#374151'; // Dark gray for borders and headers
+        const lightColor = '#E5E7EB'; // Light gray for internal borders
+        const headerTextColor = '#FFFFFF';
+        const bodyTextColor = '#111827';
+        const tickColor = '#2563EB'; // Blue for the selected box
+
+        // --- Title ---
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(20);
+        doc.setTextColor(bodyTextColor);
+        doc.text('Daily Diet Report', pageWidth / 2, 40, { align: 'center' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(12);
+        doc.text(`Year: ${dailyReportYear}  Month: ${nepaliMonths.find(m => m.number === dailyReportMonth)?.name || ''}  Day: ${dailyReportDay}`, pageWidth / 2, 60, { align: 'center' });
+
+        const processWard = (patients, wardName, startY) => {
+            if (wardName) {
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(14);
+                doc.text(`Ward: ${wardName}`, 40, startY);
+                startY += 25;
+            }
+
+            const head = [
+                [
+                    { content: 'BED\nNO.', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } },
+                    { content: 'IPD\nNO.', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } },
+                    { content: 'PATIENT\nNAME', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } },
+                    { content: 'AGE', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } },
+                    { content: 'MORNING MEAL', colSpan: 4, styles: { halign: 'center' } },
+                    { content: 'ANY ONE', colSpan: 3, styles: { halign: 'center' } },
+                    { content: 'SNACKS', colSpan: 2, styles: { halign: 'center' } },
+                    { content: 'NIGHT MEAL (ANY ONE)', colSpan: 5, styles: { halign: 'center' } },
+                    { content: 'ANY ONE', colSpan: 3, styles: { halign: 'center' } }
+                ],
+                [
+                    'NORMAL\nDIET', 'UNDER 12\nYEARS DIET', 'SOFT\nDIET', 'LIQUID\nDIET',
+                    'EGG', 'MILK', 'HIGH\nPROTEIN',
+                    'BISCUIT', 'SATU',
+                    'NORMAL\nDIET', 'UNDER 12\nYEARS DIET', 'SOFT\nDIET', 'LIQUID\nDIET', 'CHAPATI\nDIET',
+                    'EGG', 'MILK', 'HIGH\nPROTEIN'
+                ]
+            ];
+
+            const body = patients.map(row => [
+                row.bedNo, row.ipdNumber, row.name, row.age,
+                // Morning meal
+                row.morningMeal === 'Normal diet' ? tick : '',
+                row.morningMeal === 'Under 12 years diet' ? tick : '',
+                row.morningMeal === 'Soft diet' ? tick : '',
+                row.morningMeal === 'Liquid diet' ? tick : '',
+                // Morning Extra
+                row.morningExtra === 'Egg' ? tick : '',
+                row.morningExtra === 'Milk' ? tick : '',
+                row.morningExtra === 'High protein' ? tick : '',
+                // Snacks
+                row.launch === 'Biscuit' ? tick : '',
+                row.launch === 'Satu' ? tick : '',
+                // Night Meal
+                row.nightMeal === 'Normal diet' ? tick : '',
+                row.nightMeal === 'Under 12 years diet' ? tick : '',
+                row.nightMeal === 'Soft diet' ? tick : '',
+                row.nightMeal === 'Liquid diet' ? tick : '',
+                row.nightMeal === 'Chapati diet' ? tick : '',
+                // Night Extra
+                row.nightExtra === 'Egg' ? tick : '',
+                row.nightExtra === 'Milk' ? tick : '',
+                row.nightExtra === 'High protein' ? tick : '',
+            ]);
+
+            autoTable(doc, {
+                head,
+                body,
+                startY,
+                theme: 'grid',
+                rowPageBreak: 'avoid',
+                styles: {
+                    font: 'helvetica',
+                    textColor: bodyTextColor,
+                    lineColor: lightColor,
+                    lineWidth: 0.5,
+                    halign: 'center',
+                    valign: 'middle',
+                    fontSize: 7, // smaller font
+                    cellPadding: 2, // less padding
+                },
+                headStyles: {
+                    fillColor: darkColor,
+                    textColor: headerTextColor,
+                    fontStyle: 'bold',
+                    fontSize: 7,
+                    lineColor: darkColor,
+                    lineWidth: 1.5,
+                },
+                columnStyles: {
+                    0: { cellWidth: 28, halign: 'center' }, // Bed No.
+                    1: { cellWidth: 28, halign: 'center' }, // IPD No.
+                    2: { cellWidth: 110, halign: 'left' }, // Patient Name
+                    3: { cellWidth: 22, halign: 'center' }, // Age
+                    // Morning meal columns
+                    4: { cellWidth: 42, halign: 'center' }, // NORMAL DIET
+                    5: { cellWidth: 42, halign: 'center' }, // UNDER 12 YEARS DIET
+                    6: { cellWidth: 42, halign: 'center' }, // SOFT DIET
+                    7: { cellWidth: 42, halign: 'center' }, // LIQUID DIET
+                    // Any one (morning extra)
+                    8: { cellWidth: 22, halign: 'center' }, // EGG
+                    9: { cellWidth: 22, halign: 'center' }, // MILK
+                    10: { cellWidth: 40, halign: 'center' }, // HIGH PROTEIN
+                    // Snacks
+                    11: { cellWidth: 35, halign: 'center' }, // BISCUIT
+                    12: { cellWidth: 28, halign: 'center' }, // SATU
+                    // Night meal columns
+                    13: { cellWidth: 42, halign: 'center' }, // NORMAL DIET
+                    14: { cellWidth: 42, halign: 'center' }, // UNDER 12 YEARS DIET
+                    15: { cellWidth: 42, halign: 'center' }, // SOFT DIET
+                    16: { cellWidth: 42, halign: 'center' }, // LIQUID DIET
+                    17: { cellWidth: 42, halign: 'center' }, // CHAPATI DIET
+                    // Any one (night extra)
+                    18: { cellWidth: 22, halign: 'center' }, // EGG
+                    19: { cellWidth: 22, halign: 'center' }, // MILK
+                    20: { cellWidth: 40, halign: 'center' }, // HIGH PROTEIN
+                },
+                margin: { left: 10, right: 10 },
+                didDrawCell: (data) => {
+                    const darkBorderCols = [3, 7, 10, 12, 17, 20];
+                    if (data.section === 'head') {
+                        if (!darkBorderCols.includes(data.column.index)) {
+                            doc.setLineWidth(0.5);
+                            doc.setDrawColor(lightColor);
+                            doc.line(data.cell.x + data.cell.width, data.cell.y, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
+                            if (data.row.index === 0 && !data.cell.raw.rowSpan) {
+                                doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
+                            }
+                        }
+                    }
+
+                    if (darkBorderCols.includes(data.column.index)) {
+                        doc.setLineWidth(1.5);
+                        doc.setDrawColor(darkColor);
+                        doc.line(data.cell.x + data.cell.width, data.cell.y, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
+                    }
+                    
+                    if (data.section === 'body' && data.cell.raw === tick) {
+                        const x = data.cell.x + (data.cell.width / 2) - 5;
+                        const y = data.cell.y + (data.cell.height / 2) - 5;
+                        doc.setFillColor(tickColor);
+                        doc.setDrawColor(darkColor); // Border for the box
+                        doc.setLineWidth(1);
+                        doc.rect(x, y, 10, 10, 'FD'); // FD is Fill and Draw (border)
+                        data.cell.text = '';
+                    }
+                },
+                didParseCell: function (data) {
+                    if (data.section === 'body' && data.cell.raw === tick) {
+                        data.cell.text = '';
+                    }
+                },
+            });
+
+            return doc.lastAutoTable.finalY;
+        };
+        
+        if (dailyReportWard === 'ALL_WARDS') {
+            const wardGroups = dailyReportRows.reduce((acc, patient) => {
+                const ward = patient.ward || 'Unassigned';
+                if (!acc[ward]) acc[ward] = [];
+                acc[ward].push(patient);
+                return acc;
+            }, {});
+
+            let startY = 80;
+            const sortedWards = Object.keys(wardGroups).sort();
+            for (let i = 0; i < sortedWards.length; i++) {
+                const ward = sortedWards[i];
+                const patients = wardGroups[ward];
+                const finalY = processWard(patients, ward, startY);
+
+                startY = finalY + 40;
+                if (i < sortedWards.length - 1 && startY > doc.internal.pageSize.height - 100) {
+                    doc.addPage();
+                    startY = 40;
+                }
+            }
+        } else {
+            processWard(dailyReportRows, dailyReportWard, 80);
+        }
+
+        doc.save(`Daily_Diet_Report_${dailyReportYear}_${dailyReportMonth}_${dailyReportDay}_${dailyReportWard}.pdf`);
     };
 
     {/* --- DAILY REPORT TABLE STYLE OVERRIDES --- */}
@@ -692,14 +890,13 @@ const AdminDashboard = () => {
     return (
         <div className="dashboard-container">
             {/* Header: logo left, logout right */}
-            <div className="header" style={{ alignItems: 'center', marginBottom: '1.5rem' }}>
-                <img src={KoshiHospitalLogo} alt="Koshi Hospital Logo" className="logo" style={{ marginRight: '1.5rem', marginBottom: 0 }} />
-                <div style={{ flex: 1 }}></div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+            <div className="dashboard-header-row">
+                <img src={KoshiHospitalLogo} alt="Koshi Hospital Logo" className="logo" />
+                <div className="dashboard-header-spacer"></div>
+                <div className="dashboard-header-actions">
                     <button
                         onClick={logout}
                         className="button button-danger dashboard-logout-btn"
-                        style={{ minWidth: 120, marginBottom: 4 }}
                     >
                         Logout
                     </button>
@@ -710,19 +907,19 @@ const AdminDashboard = () => {
             </div>
 
             {/* New hospital/emblem/flag header row */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.2rem', gap: 32 }}>
-                <img src={NepaliEmblem} alt="Nepali Emblem" style={{ height: '120px', width: 'auto' }} />
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.2 }}>
-                    <div style={{ fontSize: 16, color: '#b71c1c', fontWeight: 400 }}>नेपाल सरकार</div>
-                    <div style={{ fontSize: 16, color: '#b71c1c', fontWeight: 400 }}>स्वास्थ्य तथा जनसंख्या मन्त्रालय</div>
-                    <div style={{ fontSize: 28, color: '#111', fontWeight: 700, margin: '6px 0 0 0' }}>कोशी अस्पताल</div>
-                    <div style={{ fontSize: 16, color: '#b71c1c', fontWeight: 400 }}>विराटनगर, नेपाल</div>
+            <div className="dashboard-emblem-row">
+                <img src={NepaliEmblem} alt="Nepali Emblem" className="dashboard-emblem" />
+                <div className="dashboard-emblem-center">
+                    <div className="dashboard-emblem-govt">नेपाल सरकार</div>
+                    <div className="dashboard-emblem-govt">स्वास्थ्य तथा जनसंख्या मन्त्रालय</div>
+                    <div className="admin-main-title">कोशी अस्पताल</div>
+                    <div className="dashboard-emblem-govt">विराटनगर, नेपाल</div>
                 </div>
-                <img src={NepaliFlag} alt="Nepali Flag" style={{ height: '120px', width: 'auto' }} />
+                <img src={NepaliFlag} alt="Nepali Flag" className="dashboard-flag" />
             </div>
 
             {/* Centered main title */}
-            <h1 className="admin-main-title" style={{ marginTop: 0, marginBottom: '2rem', textAlign: 'center', color: '#111' }}>
+            <h1 className="admin-main-title dashboard-title-center">
                 Patient Diet System
             </h1>
 
@@ -883,533 +1080,534 @@ const AdminDashboard = () => {
                         </button>
                         <h2 className="section-title" style={{ textAlign: 'center' }}>Monthly Diet Report</h2>
                         {/* Month Selection */}
-                        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: '1.5rem' }}>
-                            <select 
-                                value={selectedReportYear} 
-                                onChange={e => setSelectedReportYear(e.target.value)}
-                                style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}
-                            >
-                                <option value="2082">2082</option>
-                            </select>
-                            <select 
-                                value={selectedReportMonth} 
-                                onChange={e => {
-                                    setSelectedReportMonth(e.target.value);
-                                    setMonthlyDietReport([]);
-                                }}
-                                style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}
-                            >
-                                <option value="" disabled>Select Month</option>
-                                {nepaliMonths.map(m => (
-                                    <option key={m.number} value={m.number}>{m.name}</option>
-                                ))}
-                            </select>
-                            <button 
-                                className="button button-success"
-                                onClick={generateMonthlyDietReport}
-                                disabled={!selectedReportMonth || monthlyReportLoading}
-                            >
-                                {monthlyReportLoading ? 'Generating...' : 'Generate'}
-                            </button>
-                            {monthlyDietReport.length > 0 && !monthlyReportLoading && (
-                                <button
-                                    className="button button-primary"
-                                    onClick={handleDownloadMonthlyReport}
-                                >
-                                    Download PDF
-                                </button>
-                            )}
-                        </div>
-
-                        {/* Report Table */}
-                        {monthlyDietReport.length > 0 && (
-                            <div style={{ maxHeight: '400px', overflowX: 'auto', overflowY: 'auto' }}>
-                                <table className="data-table" style={{ width: '100%', minWidth: '400px', color: '#111' }}>
-                                    <thead>
-                                        <tr>
-                                            <th className="table-cell-header">Diet</th>
-                                            <th className="table-cell-header">Orders</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody style={{ color: '#111' }}>
-                                        {/* Tomorrow's Morning meal */}
-                                        <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Morning meal</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>Normal diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morning["Normal diet"] || 0}</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>Under 12 years diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morning["Under 12 years diet"] || 0}</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>Soft diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morning["Soft diet"] || 0}</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>Liquid diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morning["Liquid diet"] || 0}</td></tr>
-                                        {/* Any one (morning extras) */}
-                                        <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Any one</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>Egg</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morningExtra["Egg"] || 0}</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>Milk</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morningExtra["Milk"] || 0}</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>High protein</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morningExtra["High protein"] || 0}</td></tr>
-                                        {/* Snacks */}
-                                        <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Snacks</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>Biscuit</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.launch["Biscuit"] || 0}</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>Satu</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.launch["Satu"] || 0}</td></tr>
-                                        {/* Night Meal (any one) */}
-                                        <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Night Meal (any one)</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>Normal diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.night["Normal diet"] || 0}</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>Under 12 years diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.night["Under 12 years diet"] || 0}</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>Soft diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.night["Soft diet"] || 0}</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>Liquid diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.night["Liquid diet"] || 0}</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>Chapati diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.night["Chapati diet"] || 0}</td></tr>
-                                        {/* Any one (night extras) */}
-                                        <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Any one</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>Egg</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.nightExtra["Egg"] || 0}</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>Milk</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.nightExtra["Milk"] || 0}</td></tr>
-                                        <tr><td style={{ paddingLeft: 24, color: '#111' }}>High protein</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.nightExtra["High protein"] || 0}</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-
-                        {monthlyReportLoading && (
-                            <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
-                                <Spinner />
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* Daily Report Modal */}
-            {showDailyReportModal && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="card" style={{ maxWidth: 1000, width: '95%', position: 'relative', maxHeight: '90vh', overflowY: 'auto', padding: '32px 24px 24px 24px' }}>
+                    <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: '1.5rem' }}>
+                        <select 
+                            value={selectedReportYear} 
+                            onChange={e => setSelectedReportYear(e.target.value)}
+                            style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}
+                        >
+                            <option value="2082">2082</option>
+                        </select>
+                        <select 
+                            value={selectedReportMonth} 
+                            onChange={e => {
+                                setSelectedReportMonth(e.target.value);
+                                setMonthlyDietReport([]);
+                            }}
+                            style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}
+                        >
+                            <option value="" disabled>Select Month</option>
+                            {nepaliMonths.map(m => (
+                                <option key={m.number} value={m.number}>{m.name}</option>
+                            ))}
+                        </select>
                         <button 
-                            onClick={() => {
-                                setShowDailyReportModal(false);
-                                setDailyReportRows([]);
-                            }} 
-                            style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}
+                            className="button button-success"
+                            onClick={generateMonthlyDietReport}
+                            disabled={!selectedReportMonth || monthlyReportLoading}
                         >
-                            &times;
+                            {monthlyReportLoading ? 'Generating...' : 'Generate'}
                         </button>
-                        <h2 className="section-title" style={{ textAlign: 'center' }}>Daily Diet Report</h2>
-                        {/* Date and Ward Selection */}
-                        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-                            <select value={dailyReportYear} onChange={e => setDailyReportYear(e.target.value)} style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}>
-                                <option value="2082">2082</option>
-                            </select>
-                            <select value={dailyReportMonth} onChange={e => setDailyReportMonth(e.target.value)} style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}>
-                                {nepaliMonths.map(m => (
-                                    <option key={m.number} value={m.number}>{m.name}</option>
-                                ))}
-                            </select>
-                            <select value={dailyReportDay} onChange={e => setDailyReportDay(e.target.value)} style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}>
-                                {[...Array(32).keys()].slice(1).map(d => (
-                                    <option key={d} value={String(d).padStart(2, '0')}>{d}</option>
-                                ))}
-                            </select>
-                            <select value={dailyReportWard} onChange={e => setDailyReportWard(e.target.value)} style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}>
-                                <option value="" disabled>Select Ward</option>
-                                {wards.map(w => (
-                                    <option key={w} value={w}>{w}</option>
-                                ))}
-                            </select>
-                            <button 
-                                className="button button-success"
-                                onClick={handleGenerateDailyReport}
-                                disabled={!dailyReportWard || dailyReportLoading}
+                        {monthlyDietReport.length > 0 && !monthlyReportLoading && (
+                            <button
+                                className="button button-primary"
+                                onClick={handleDownloadMonthlyReport}
                             >
-                                {dailyReportLoading ? 'Generating...' : 'Generate'}
+                                Download PDF
                             </button>
-                            {dailyReportRows.length > 0 && !dailyReportLoading && (
-                                <button
-                                    className="button button-primary"
-                                    onClick={handleDownloadDailyReport}
-                                >
-                                    Download PDF
-                                </button>
-                            )}
-                        </div>
-                        {/* Report Table */}
-                        {dailyReportRows.length > 0 && (
-                            <div className="table-container" style={{ maxHeight: '400px', overflowX: 'auto', overflowY: 'auto' }}>
-                                <table className="patient-table" style={{ color: '#111', borderCollapse: 'separate', borderSpacing: 0, width: '100%' }}>
-                                    <thead style={{ color: '#111' }}>
-                                        <tr>
-                                            <th className="diet-stack" rowSpan="2" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', borderLeft: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Bed<br/>No.</th>
-                                            <th className="diet-stack" rowSpan="2" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 700 }}>IPD<br/>No.</th>
-                                            <th className="diet-stack" rowSpan="2" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Patient<br/>name</th>
-                                            <th rowSpan="2" className="dark-border" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Age</th>
-                                            <th colSpan="4" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151', color: '#111', background: '#fff', fontWeight: 700 }}>Morning meal</th>
-                                            <th colSpan="3" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151', color: '#111', background: '#fff', fontWeight: 700 }}>Any one</th>
-                                            <th colSpan="2" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151', color: '#111', background: '#fff', fontWeight: 700 }}>Snacks</th>
-                                            <th colSpan="5" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151', color: '#111', background: '#fff', fontWeight: 700 }}>Night Meal (any one)</th>
-                                            <th colSpan="3" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151', color: '#111', background: '#fff', fontWeight: 700 }}>Any one</th>
-                                        </tr>
-                                        <tr>
-                                            <th className="light-border diet-stack" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Normal<br/>diet</th>
-                                            <th className="light-border diet-stack under12-col" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Under 12<br/>years<br/>diet</th>
-                                            <th className="light-border diet-stack" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Soft<br/>diet</th>
-                                            <th className="dark-border diet-stack" style={{ color: '#111', borderRight: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Liquid<br/>diet</th>
-                                            <th className="light-border" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Egg</th>
-                                            <th className="dark-border" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Milk</th>
-                                            <th className="light-border" style={{ color: '#111', borderRight: '3px solid #374151', background: '#fff', fontWeight: 700 }}>High protein</th>
-                                            <th className="light-border" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Biscuit</th>
-                                            <th className="dark-border" style={{ color: '#111', borderRight: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Satu</th>
-                                            <th className="light-border diet-stack" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Normal<br/>diet</th>
-                                            <th className="light-border diet-stack under12-col" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Under 12<br/>years<br/>diet</th>
-                                            <th className="light-border diet-stack" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Soft<br/>diet</th>
-                                            <th className="light-border diet-stack" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Liquid<br/>diet</th>
-                                            <th className="dark-border diet-stack chapati-col" style={{ color: '#111', borderRight: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Chapati<br/>diet</th>
-                                            <th className="light-border" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Egg</th>
-                                            <th className="light-border" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Milk</th>
-                                            <th className="light-border" style={{ color: '#111', borderRight: '3px solid #374151', background: '#fff', fontWeight: 700 }}>High protein</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody style={{ color: '#111' }}>
-                                        {dailyReportRows.map((patient, idx) => (
-                                            <tr key={idx} style={{ color: '#111' }}>
-                                                <td className="table-cell" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', borderLeft: '3px solid #374151', background: '#fff', fontWeight: 500 }}>{patient.bedNo}</td>
-                                                <td className="table-cell" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500 }}>{patient.ipdNumber}</td>
-                                                <td className="table-cell" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500 }}>{patient.name}</td>
-                                                <td className="table-cell dark-border" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500 }}>{patient.age}</td>
-                                                {/* Morning meal */}
-                                                {['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet'].map((opt, i) => (
-                                                    <td
-                                                        className={`table-cell diet-cell${i < 3 ? ' light-border' : ' dark-border'}`}
-                                                        key={`morningMeal-${opt}`}
-                                                        style={{ color: '#111', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500, ...(i === 3 ? { borderRight: '3px solid #374151' } : {}) }}
-                                                    >
-                                                        <span className={`diet-box ${patient.morningMeal === opt ? 'selected' : ''}`} style={{ color: '#111', background: '#fff' }}></span>
-                                                    </td>
-                                                ))}
-                                                {/* Morning Extra */}
-                                                {['Egg', 'Milk', 'High protein'].map((opt, i) => (
-                                                    <td
-                                                        className={`table-cell diet-cell${i === 0 ? ' light-border' : i === 1 ? ' dark-border' : ' light-border'}`}
-                                                        key={`morningExtra-${opt}`}
-                                                        style={{ color: '#111', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500, ...(i === 2 ? { borderRight: '3px solid #374151' } : {}) }}
-                                                    >
-                                                        <span className={`diet-box ${patient.morningExtra === opt ? 'selected' : ''}`} style={{ color: '#111', background: '#fff' }}></span>
-                                                    </td>
-                                                ))}
-                                                {/* Snacks */}
-                                                {['Biscuit', 'Satu'].map((opt, i) => (
-                                                    <td
-                                                        className={`table-cell diet-cell${i === 0 ? ' light-border biscuit-col' : ' dark-border'}`}
-                                                        key={`launch-${opt}`}
-                                                        style={{ color: '#111', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500, ...(i === 1 ? { borderRight: '3px solid #374151' } : {}) }}
-                                                    >
-                                                        <span className={`diet-box ${patient.launch === opt ? 'selected' : ''}`} style={{ color: '#111', background: '#fff' }}></span>
-                                                    </td>
-                                                ))}
-                                                {/* Night Meal */}
-                                                {['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet', 'Chapati diet'].map((opt, i) => (
-                                                    <td
-                                                        className={`table-cell diet-cell${i < 4 ? ' light-border' : ' dark-border'}${opt === 'Under 12 years diet' ? ' under12-col' : ''}${opt === 'Chapati diet' ? ' chapati-col' : ''}`}
-                                                        key={`nightMeal-${opt}`}
-                                                        style={{ color: '#111', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500, ...(i === 4 ? { borderRight: '3px solid #374151' } : {}) }}
-                                                    >
-                                                        <span className={`diet-box ${patient.nightMeal === opt ? 'selected' : ''}`} style={{ color: '#111', background: '#fff' }}></span>
-                                                    </td>
-                                                ))}
-                                                {/* Night Extra */}
-                                                {['Egg', 'Milk', 'High protein'].map((opt, i) => (
-                                                    <td
-                                                        className={`table-cell diet-cell${i === 0 ? ' light-border' : i === 1 ? '' : ' light-border'}`}
-                                                        key={`nightExtra-${opt}`}
-                                                        style={{ color: '#111', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500, ...(i === 2 ? { borderRight: '3px solid #374151' } : {}) }}
-                                                    >
-                                                        <span className={`diet-box ${patient.nightExtra === opt ? 'selected' : ''}`} style={{ color: '#111', background: '#fff' }}></span>
-                                                    </td>
-                                                ))}
-                                            </tr>
-                                        ))}
-                                        {/* Add bottom border to the last row */}
-                                        <tr>
-                                            <td colSpan={24} style={{ borderBottom: '3px solid #374151', padding: 0, height: 0 }}></td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                        {dailyReportLoading && (
-                            <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
-                                <Spinner />
-                            </div>
                         )}
                     </div>
-                </div>
-            )}
 
-            {/* Users section title */}
-            <div className="users-header-row" style={{ display: 'flex', alignItems: 'center', width: '100%', marginBottom: '1rem' }}>
-                <h2 className="section-title" style={{ margin: 0, textAlign: 'left', fontWeight: 800 }}>Users</h2>
-            </div>
-
-            {/* Users Table */}
-            {fetchingUsers ? (
-                <Spinner />
-            ) : (
-                <div className="table-responsive">
-                    <table className="data-table styled-table">
-                        <thead className="table-header">
-                            <tr>
-                                <th className="table-cell-header">Name</th>
-                                <th className="table-cell-header">Email</th>
-                                <th className="table-cell-header">Ward</th>
-                                <th className="table-cell-header">Phone</th>
-                                <th className="table-cell-header">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {createdUsers.length === 0 ? (
-                                <tr className="empty-table-row">
-                                    <td className="empty-table-cell" colSpan={5}>
-                                        <span className="table-empty-message">No users created yet.</span>
-                                    </td>
-                                </tr>
-                            ) : (
-                                createdUsers.map((userItem, idx) => (
-                                    <tr key={userItem._id} className={`table-row user-row${idx % 2 === 0 ? ' even-row' : ' odd-row'}`}> 
-                                        <td className="table-cell">
-                                            <button 
-                                                onClick={() => handleViewUserData(userItem)}
-                                                className="link-button"
-                                                style={{ color: '#4A90E2', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                                            >
-                                                {userItem.name}
-                                            </button>
-                                        </td>
-                                        <td className="table-cell">{userItem.email}</td>
-                                        <td className="table-cell capitalize-text">{userItem.department}</td>
-                                        <td className="table-cell">{userItem.phone}</td>
-                                        <td className="table-cell">
-                                            <div className="admin-action-row">
-                                                <button className="button button-primary admin-action-btn" onClick={() => handleEditClick(userItem)}>Edit</button>
-                                                <button className="button button-danger admin-action-btn" onClick={() => handleDeleteClick(userItem._id)}>Delete</button>
-                                            </div>
-                                        </td>
+                    {/* Report Table */}
+                    {monthlyDietReport.length > 0 && (
+                        <div style={{ maxHeight: '400px', overflowX: 'auto', overflowY: 'auto' }}>
+                            <table className="data-table" style={{ width: '100%', minWidth: '400px', color: '#111' }}>
+                                <thead>
+                                    <tr>
+                                        <th className="table-cell-header">Diet</th>
+                                        <th className="table-cell-header">Orders</th>
                                     </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                    {/* Create User Button below users table */}
-                    <div style={{ textAlign: 'right', marginTop: '1rem', marginRight: '2rem' }}>
-                        <button
-                            className="button button-primary"
-                            style={{ minWidth: 120, width: 'auto', display: 'inline-block' }}
-                            onClick={() => setShowCreateUser(true)}
-                        >
-                            Create User
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* Create User Modal */}
-            {showCreateUser && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: '20px' }}>
-                    <div className="card" style={{ maxWidth: 400, width: '100%', position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
-                        <button onClick={() => setShowCreateUser(false)} style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>&times;</button>
-                        <h2 className="section-title" style={{ textAlign: 'center' }}>Create New User</h2>
-                        <form onSubmit={handleCreateUser} className="form-layout">
-                            <div className="form-group">
-                                <label className="label" htmlFor="new-user-name">Name</label>
-                                <input type="text" id="new-user-name" value={userName} onChange={e => setUserName(e.target.value)} className="input-field" placeholder="User Name" required />
-                            </div>
-                            <div className="form-group">
-                                <label className="label" htmlFor="new-user-email">Email</label>
-                                <input type="email" id="new-user-email" value={userEmail} onChange={e => setUserEmail(e.target.value)} className="input-field" placeholder="User Email" required />
-                            </div>
-                            <div className="form-group">
-                                <label className="label" htmlFor="new-user-password">Password</label>
-                                <input type="password" id="new-user-password" value={userPassword} onChange={e => setUserPassword(e.target.value)} className="input-field" placeholder="User Password" required />
-                            </div>
-                            <div className="form-group">
-                                <label className="label" htmlFor="new-user-phone">Phone Number</label>
-                                <input type="tel" id="new-user-phone" value={userPhone} onChange={e => setUserPhone(e.target.value)} className="input-field" placeholder="Phone Number" required />
-                            </div>
-                            <div className="form-group">
-                                <label className="label" htmlFor="new-user-department">Ward</label>
-                                <select id="new-user-department" value={userDepartment} onChange={e => setUserDepartment(e.target.value)} className="input-field">
-                                    {wards.map(ward => (
-                                        <option key={ward} value={ward}>{ward.charAt(0).toUpperCase() + ward.slice(1)}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <button type="submit" className="button button-success" disabled={creatingUser} style={{ width: 200, alignSelf: 'center' }}>
-                                {creatingUser ? 'Creating...' : 'Create User'}
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* Edit User Modal */}
-            {showEditUser && editUserData && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="card" style={{ maxWidth: 400, width: '100%', position: 'relative' }}>
-                        <button onClick={() => { setShowEditUser(false); setEditUserData(null); }} style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>&times;</button>
-                        <h2 className="section-title" style={{ textAlign: 'center' }}>Edit User</h2>
-                        <form onSubmit={handleEditSave} className="form-layout">
-                            <div className="form-group">
-                                <label className="label" htmlFor="edit-user-name">Name</label>
-                                <input type="text" id="edit-user-name" name="name" value={editUserData.name} onChange={handleEditChange} className="input-field" required />
-                            </div>
-                            <div className="form-group">
-                                <label className="label" htmlFor="edit-user-email">Email</label>
-                                <input type="email" id="edit-user-email" name="email" value={editUserData.email} onChange={handleEditChange} className="input-field" required />
-                            </div>
-                            <div className="form-group">
-                                <label className="label" htmlFor="edit-user-phone">Phone Number</label>
-                                <input type="tel" id="edit-user-phone" name="phone" value={editUserData.phone} onChange={handleEditChange} className="input-field" required />
-                            </div>
-                            <div className="form-group">
-                                <label className="label" htmlFor="edit-user-department">Ward</label>
-                                <select id="edit-user-department" name="department" value={editUserData.department} onChange={handleEditChange} className="input-field">
-                                    {wards.map(ward => (
-                                        <option key={ward} value={ward}>{ward.charAt(0).toUpperCase() + ward.slice(1)}</option>
-                                    ))}
-                                </select>
-                            </div>
-                                                       <button type="submit" className="button button-success" style={{ width: 200, alignSelf: 'center' }}>
-                                Save Changes
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}            {/* Delete User Confirmation Modal */}
-            {showDeleteUser && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="card" style={{ maxWidth: 350, width: '100%', position: 'relative', textAlign: 'center' }}>
-                        <h2 className="section-title">Delete User</h2>
-                        <p className="message-text">Are you sure you want to delete this user?</p>
-                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 24 }}>
-                            <button className="button button-primary" style={{ width: 100, margin: 0 }} onClick={() => { setShowDeleteUser(false); setDeleteUserId(null); }}>Cancel</button>
-                            <button className="button button-danger" style={{ width: 100, margin: 0 }} onClick={handleDeleteConfirm}>Yes</button>
+                                </thead>
+                                <tbody style={{ color: '#111' }}>
+                                    {/* Tomorrow's Morning meal */}
+                                    <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Morning meal</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>Normal diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morning["Normal diet"] || 0}</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>Under 12 years diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morning["Under 12 years diet"] || 0}</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>Soft diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morning["Soft diet"] || 0}</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>Liquid diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morning["Liquid diet"] || 0}</td></tr>
+                                    {/* Any one (morning extras) */}
+                                    <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Any one</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>Egg</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morningExtra["Egg"] || 0}</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>Milk</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morningExtra["Milk"] || 0}</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>High protein</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.morningExtra["High protein"] || 0}</td></tr>
+                                    {/* Snacks */}
+                                    <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Snacks</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>Biscuit</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.launch["Biscuit"] || 0}</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>Satu</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.launch["Satu"] || 0}</td></tr>
+                                    {/* Night Meal (any one) */}
+                                    <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Night Meal (any one)</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>Normal diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.night["Normal diet"] || 0}</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>Under 12 years diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.night["Under 12 years diet"] || 0}</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>Soft diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.night["Soft diet"] || 0}</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>Liquid diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.night["Liquid diet"] || 0}</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>Chapati diet</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.night["Chapati diet"] || 0}</td></tr>
+                                    {/* Any one (night extras) */}
+                                    <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Any one</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>Egg</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.nightExtra["Egg"] || 0}</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>Milk</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.nightExtra["Milk"] || 0}</td></tr>
+                                    <tr><td style={{ paddingLeft: 24, color: '#111' }}>High protein</td><td style={{ color: '#111' }}>{monthlyDietReport[0]?.nightExtra["High protein"] || 0}</td></tr>
+                                </tbody>
+                            </table>
                         </div>
-                    </div>
+                    )}
+
+                    {monthlyReportLoading && (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
+                            <Spinner />
+                        </div>
+                    )}
                 </div>
-            )}
-
-            {/* Patient Records View Modal */}
-            {showPatientRecords && selectedUser && (
-                <UserRecordsWindow
-                    user={selectedUser}
-                    onClose={() => {
-                        setShowPatientRecords(false);
-                        setSelectedUser(null);
-                    }}
-                />
-            )}
-
-            {/* Vendor Users Section */}
-            <div className="users-header-row" style={{ display: 'flex', alignItems: 'center', width: '100%', marginBottom: '1rem', marginTop: '2.5rem' }}>
-                <h2 className="section-title" style={{ margin: 0, textAlign: 'left', fontWeight: 800 }}>Vendor Users</h2>
             </div>
-            {/* Vendor Users Table */}
-            {fetchingVendors ? (
-                <Spinner />
-            ) : (
-                <div className="table-responsive">
-                    <table className="data-table styled-table">
-                        <thead className="table-header">
-                            <tr>
-                                <th className="table-cell-header">Name</th>
-                                <th className="table-cell-header">Email</th>
-                                <th className="table-cell-header">Phone</th>
-                                <th className="table-cell-header">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {createdVendors.length === 0 ? (
-                                <tr className="empty-table-row">
-                                    <td className="empty-table-cell" colSpan={4}>
-                                        <span className="table-empty-message">No vendor users created yet.</span>
-                                    </td>
-                                </tr>
-                            ) : (
-                                createdVendors.map((vendor, idx) => (
-                                    <tr key={vendor._id} className={`table-row user-row${idx % 2 === 0 ? ' even-row' : ' odd-row'}`}> 
-                                        <td className="table-cell">{vendor.name}</td>
-                                        <td className="table-cell">{vendor.email}</td>
-                                        <td className="table-cell">{vendor.phone || vendor.phoneNumber || '-'}</td>
-                                        <td className="table-cell">
-                                            <div className="admin-action-row">
-                                                <button className="button button-primary admin-action-btn" onClick={() => handleEditVendorClick(vendor)}>Edit</button>
-                                                <button className="button button-danger admin-action-btn" onClick={() => handleDeleteVendorClick(vendor._id)}>Delete</button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                    {/* Create Vendor User Button below vendor users table */}
-                    <div style={{ textAlign: 'right', marginTop: '1rem', marginRight: '2rem' }}>
-                        <button
-                            className="button button-primary"
-                            style={{ minWidth: 160, width: 'auto', display: 'inline-block' }}
-                            onClick={() => setShowCreateVendor(true)}
-                        >
-                            Create Vendor User
-                        </button>
-                    </div>
-                </div>
-            )}
-            {showEditVendor && editVendorData && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="card" style={{ maxWidth: 400, width: '100%', position: 'relative' }}>
-                        <button onClick={() => { setShowEditVendor(false); setEditVendorData(null); }} style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>&times;</button>
-                        <h2 className="section-title" style={{ textAlign: 'center' }}>Edit Vendor</h2>
-                        {/* Implement vendor edit form here if needed */}
-                        <div style={{ textAlign: 'center', margin: '2rem 0' }}>
-                            <span className="message-text">Edit vendor functionality coming soon.</span>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {showDeleteVendor && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="card" style={{ maxWidth: 350, width: '100%', position: 'relative', textAlign: 'center' }}>
-                        <h2 className="section-title">Delete Vendor</h2>
-                        <p className="message-text">Are you sure you want to delete this vendor?</p>
-                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 24 }}>
-                            <button className="button button-primary" style={{ width: 100, margin: 0 }} onClick={() => { setShowDeleteVendor(false); setDeleteVendorId(null); }}>Cancel</button>
-                            <button className="button button-danger" style={{ width: 100, margin: 0 }} onClick={handleDeleteVendorConfirm}>Yes</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+        )}
 
-            {/* Create Vendor User Modal */}
-            {showCreateVendor && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: '20px' }}>
-                    <div className="card" style={{ maxWidth: 400, width: '100%', position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
-                        <button onClick={() => setShowCreateVendor(false)} style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>&times;</button>
-                        <h2 className="section-title" style={{ textAlign: 'center' }}>Create Vendor User</h2>
-                        <form onSubmit={handleCreateVendor} className="form-layout">
-                            <div className="form-group">
-                                <label className="label" htmlFor="vendor-name">Name</label>
-                                <input type="text" id="vendor-name" value={vendorName} onChange={e => setVendorName(e.target.value)} className="input-field" placeholder="Vendor Name" required />
-                            </div>
-                            <div className="form-group">
-                                <label className="label" htmlFor="vendor-email">Email</label>
-                                <input type="email" id="vendor-email" value={vendorEmail} onChange={e => setVendorEmail(e.target.value)} className="input-field" placeholder="Vendor Email" required />
-                            </div>
-                            <div className="form-group">
-                                <label className="label" htmlFor="vendor-password">Password</label>
-                                <input type="password" id="vendor-password" value={vendorPassword} onChange={e => setVendorPassword(e.target.value)} className="input-field" placeholder="Vendor Password" required />
-                            </div>
-                            <div className="form-group">
-                                <label className="label" htmlFor="vendor-phone">Phone Number</label>
-                                <input type="tel" id="vendor-phone" value={vendorPhone} onChange={e => setVendorPhone(e.target.value)} className="input-field" placeholder="Phone Number" required />
-                            </div>
-                            <button type="submit" className="button button-success" disabled={creatingVendor} style={{ width: 200, alignSelf: 'center' }}>
-                                {creatingVendor ? 'Creating...' : 'Create Vendor'}
+        {/* Daily Report Modal */}
+        {showDailyReportModal && (
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="card" style={{ maxWidth: 1000, width: '95%', position: 'relative', maxHeight: '90vh', overflowY: 'auto', padding: '32px 24px 24px 24px' }}>
+                    <button 
+                        onClick={() => {
+                            setShowDailyReportModal(false);
+                            setDailyReportRows([]);
+                        }} 
+                        style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}
+                    >
+                        &times;
+                    </button>
+                    <h2 className="section-title" style={{ textAlign: 'center' }}>Daily Diet Report</h2>
+                    {/* Date and Ward Selection */}
+                    <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                        <select value={dailyReportYear} onChange={e => setDailyReportYear(e.target.value)} style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}>
+                            <option value="2082">2082</option>
+                        </select>
+                        <select value={dailyReportMonth} onChange={e => setDailyReportMonth(e.target.value)} style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}>
+                            {nepaliMonths.map(m => (
+                                <option key={m.number} value={m.number}>{m.name}</option>
+                            ))}
+                        </select>
+                        <select value={dailyReportDay} onChange={e => setDailyReportDay(e.target.value)} style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}>
+                            {[...Array(32).keys()].slice(1).map(d => (
+                                <option key={d} value={String(d).padStart(2, '0')}>{d}</option>
+                            ))}
+                        </select>
+                        <select value={dailyReportWard} onChange={e => setDailyReportWard(e.target.value)} style={{ fontSize: 16, padding: '0.2rem 0.5rem' }}>
+                            <option value="" disabled>Select Ward</option>
+                            <option value="ALL_WARDS">All Wards</option>
+                            {wards.map(w => (
+                                <option key={w} value={w}>{w}</option>
+                            ))}
+                        </select>
+                        <button 
+                            className="button button-success"
+                            onClick={handleGenerateDailyReport}
+                            disabled={!dailyReportWard || dailyReportLoading}
+                        >
+                            {dailyReportLoading ? 'Generating...' : 'Generate'}
+                        </button>
+                        {dailyReportRows.length > 0 && !dailyReportLoading && (
+                            <button
+                                className="button button-primary"
+                                onClick={handleDownloadDailyReport}
+                            >
+                                Download PDF
                             </button>
-                        </form>
+                        )}
                     </div>
+                    {/* Report Table */}
+                    {dailyReportRows.length > 0 && (
+                        <div className="table-container" style={{ maxHeight: '400px', overflowX: 'auto', overflowY: 'auto' }}>
+                            <table className="patient-table" style={{ color: '#111', borderCollapse: 'separate', borderSpacing: 0, width: '100%' }}>
+                                <thead style={{ color: '#111' }}>
+                                    <tr>
+                                        <th className="diet-stack" rowSpan="2" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', borderLeft: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Bed<br/>No.</th>
+                                        <th className="diet-stack" rowSpan="2" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 700 }}>IPD<br/>No.</th>
+                                        <th className="diet-stack" rowSpan="2" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Patient<br/>name</th>
+                                        <th rowSpan="2" className="dark-border" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Age</th>
+                                        <th colSpan="4" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151', color: '#111', background: '#fff', fontWeight: 700 }}>Morning meal</th>
+                                        <th colSpan="3" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151', color: '#111', background: '#fff', fontWeight: 700 }}>Any one</th>
+                                        <th colSpan="2" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151', color: '#111', background: '#fff', fontWeight: 700 }}>Snacks</th>
+                                        <th colSpan="5" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151', color: '#111', background: '#fff', fontWeight: 700 }}>Night Meal (any one)</th>
+                                        <th colSpan="3" style={{ borderRight: '3px solid #374151', borderTop: '3px solid #374151', color: '#111', background: '#fff', fontWeight: 700 }}>Any one</th>
+                                    </tr>
+                                    <tr>
+                                        <th className="light-border diet-stack" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Normal<br/>diet</th>
+                                        <th className="light-border diet-stack under12-col" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Under 12<br/>years<br/>diet</th>
+                                        <th className="light-border diet-stack" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Soft<br/>diet</th>
+                                        <th className="dark-border diet-stack" style={{ color: '#111', borderRight: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Liquid<br/>diet</th>
+                                        <th className="light-border" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Egg</th>
+                                        <th className="dark-border" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Milk</th>
+                                        <th className="light-border" style={{ color: '#111', borderRight: '3px solid #374151', background: '#fff', fontWeight: 700 }}>High protein</th>
+                                        <th className="light-border" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Biscuit</th>
+                                        <th className="dark-border" style={{ color: '#111', borderRight: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Satu</th>
+                                        <th className="light-border diet-stack" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Normal<br/>diet</th>
+                                        <th className="light-border diet-stack under12-col" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Under 12<br/>years<br/>diet</th>
+                                        <th className="light-border diet-stack" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Soft<br/>diet</th>
+                                        <th className="light-border diet-stack" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Liquid<br/>diet</th>
+                                        <th className="dark-border diet-stack chapati-col" style={{ color: '#111', borderRight: '3px solid #374151', background: '#fff', fontWeight: 700 }}>Chapati<br/>diet</th>
+                                        <th className="light-border" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Egg</th>
+                                        <th className="light-border" style={{ color: '#111', background: '#fff', fontWeight: 700 }}>Milk</th>
+                                        <th className="light-border" style={{ color: '#111', borderRight: '3px solid #374151', background: '#fff', fontWeight: 700 }}>High protein</th>
+                                    </tr>
+                                </thead>
+                                <tbody style={{ color: '#111' }}>
+                                    {dailyReportRows.map((patient, idx) => (
+                                        <tr key={idx} style={{ color: '#111' }}>
+                                            <td className="table-cell" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', borderLeft: '3px solid #374151', background: '#fff', fontWeight: 500 }}>{patient.bedNo}</td>
+                                            <td className="table-cell" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500 }}>{patient.ipdNumber}</td>
+                                            <td className="table-cell" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500 }}>{patient.name}</td>
+                                            <td className="table-cell dark-border" style={{ color: '#111', borderRight: '3px solid #374151', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500 }}>{patient.age}</td>
+                                            {/* Morning meal */}
+                                            {['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet'].map((opt, i) => (
+                                                <td
+                                                    className={`table-cell diet-cell${i < 3 ? ' light-border' : ' dark-border'}`}
+                                                    key={`morningMeal-${opt}`}
+                                                    style={{ color: '#111', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500, ...(i === 3 ? { borderRight: '3px solid #374151' } : {}) }}
+                                                >
+                                                    <span className={`diet-box ${patient.morningMeal === opt ? 'selected' : ''}`} style={{ color: '#111', background: '#fff' }}></span>
+                                                </td>
+                                            ))}
+                                            {/* Morning Extra */}
+                                            {['Egg', 'Milk', 'High protein'].map((opt, i) => (
+                                                <td
+                                                    className={`table-cell diet-cell${i === 0 ? ' light-border' : i === 1 ? ' dark-border' : ' light-border'}`}
+                                                    key={`morningExtra-${opt}`}
+                                                    style={{ color: '#111', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500, ...(i === 2 ? { borderRight: '3px solid #374151' } : {}) }}
+                                                >
+                                                    <span className={`diet-box ${patient.morningExtra === opt ? 'selected' : ''}`} style={{ color: '#111', background: '#fff' }}></span>
+                                                </td>
+                                            ))}
+                                            {/* Snacks */}
+                                            {['Biscuit', 'Satu'].map((opt, i) => (
+                                                <td
+                                                    className={`table-cell diet-cell${i === 0 ? ' light-border biscuit-col' : ' dark-border'}`}
+                                                    key={`launch-${opt}`}
+                                                    style={{ color: '#111', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500, ...(i === 1 ? { borderRight: '3px solid #374151' } : {}) }}
+                                                >
+                                                    <span className={`diet-box ${patient.launch === opt ? 'selected' : ''}`} style={{ color: '#111', background: '#fff' }}></span>
+                                                </td>
+                                            ))}
+                                            {/* Night Meal */}
+                                            {['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet', 'Chapati diet'].map((opt, i) => (
+                                                <td
+                                                    className={`table-cell diet-cell${i < 4 ? ' light-border' : ' dark-border'}${opt === 'Under 12 years diet' ? ' under12-col' : ''}${opt === 'Chapati diet' ? ' chapati-col' : ''}`}
+                                                    key={`nightMeal-${opt}`}
+                                                    style={{ color: '#111', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500, ...(i === 4 ? { borderRight: '3px solid #374151' } : {}) }}
+                                                >
+                                                    <span className={`diet-box ${patient.nightMeal === opt ? 'selected' : ''}`} style={{ color: '#111', background: '#fff' }}></span>
+                                                </td>
+                                            ))}
+                                            {/* Night Extra */}
+                                            {['Egg', 'Milk', 'High protein'].map((opt, i) => (
+                                                <td
+                                                    className={`table-cell diet-cell${i === 0 ? ' light-border' : i === 1 ? '' : ' light-border'}`}
+                                                    key={`nightExtra-${opt}`}
+                                                    style={{ color: '#111', borderTop: '3px solid #374151', background: '#fff', fontWeight: 500, ...(i === 2 ? { borderRight: '3px solid #374151' } : {}) }}
+                                                >
+                                                    <span className={`diet-box ${patient.nightExtra === opt ? 'selected' : ''}`} style={{ color: '#111', background: '#fff' }}></span>
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                    {/* Add bottom border to the last row */}
+                                    <tr>
+                                        <td colSpan={24} style={{ borderBottom: '3px solid #374151', padding: 0, height: 0 }}></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                    {dailyReportLoading && (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
+                            <Spinner />
+                        </div>
+                    )}
                 </div>
-            )}
+            </div>
+        )}
+
+        {/* Users section title */}
+        <div className="users-header-row" style={{ display: 'flex', alignItems: 'center', width: '100%', marginBottom: '1rem' }}>
+            <h2 className="section-title" style={{ margin: 0, textAlign: 'left', fontWeight: 800 }}>Users</h2>
         </div>
-    );
+
+        {/* Users Table */}
+        {fetchingUsers ? (
+            <Spinner />
+        ) : (
+            <div className="table-responsive">
+                <table className="data-table styled-table">
+                    <thead className="table-header">
+                        <tr>
+                            <th className="table-cell-header">Name</th>
+                            <th className="table-cell-header">Email</th>
+                            <th className="table-cell-header">Ward</th>
+                            <th className="table-cell-header">Phone</th>
+                            <th className="table-cell-header">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {createdUsers.length === 0 ? (
+                            <tr className="empty-table-row">
+                                <td className="empty-table-cell" colSpan={5}>
+                                    <span className="table-empty-message">No users created yet.</span>
+                                </td>
+                            </tr>
+                        ) : (
+                            createdUsers.map((userItem, idx) => (
+                                <tr key={userItem._id} className={`table-row user-row${idx % 2 === 0 ? ' even-row' : ' odd-row'}`}> 
+                                    <td className="table-cell">
+                                        <button 
+                                            onClick={() => handleViewUserData(userItem)}
+                                            className="link-button"
+                                            style={{ color: '#4A90E2', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                                        >
+                                            {userItem.name}
+                                        </button>
+                                    </td>
+                                    <td className="table-cell">{userItem.email}</td>
+                                    <td className="table-cell capitalize-text">{userItem.department}</td>
+                                    <td className="table-cell">{userItem.phone}</td>
+                                    <td className="table-cell">
+                                        <div className="admin-action-row">
+                                            <button className="button button-primary admin-action-btn" onClick={() => handleEditClick(userItem)}>Edit</button>
+                                            <button className="button button-danger admin-action-btn" onClick={() => handleDeleteClick(userItem._id)}>Delete</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+                {/* Create User Button below users table */}
+                <div style={{ textAlign: 'right', marginTop: '1rem', marginRight: '2rem' }}>
+                    <button
+                        className="button button-primary"
+                        style={{ minWidth: 120, width: 'auto', display: 'inline-block' }}
+                        onClick={() => setShowCreateUser(true)}
+                    >
+                        Create User
+                    </button>
+                </div>
+            </div>
+        )}
+
+        {/* Create User Modal */}
+        {showCreateUser && (
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: '20px' }}>
+                <div className="card" style={{ maxWidth: 400, width: '100%', position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
+                    <button onClick={() => setShowCreateUser(false)} style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>&times;</button>
+                    <h2 className="section-title" style={{ textAlign: 'center' }}>Create New User</h2>
+                    <form onSubmit={handleCreateUser} className="form-layout">
+                        <div className="form-group">
+                            <label className="label" htmlFor="new-user-name">Name</label>
+                            <input type="text" id="new-user-name" value={userName} onChange={e => setUserName(e.target.value)} className="input-field" placeholder="User Name" required />
+                        </div>
+                        <div className="form-group">
+                            <label className="label" htmlFor="new-user-email">Email</label>
+                            <input type="email" id="new-user-email" value={userEmail} onChange={e => setUserEmail(e.target.value)} className="input-field" placeholder="User Email" required />
+                        </div>
+                        <div className="form-group">
+                            <label className="label" htmlFor="new-user-password">Password</label>
+                            <input type="password" id="new-user-password" value={userPassword} onChange={e => setUserPassword(e.target.value)} className="input-field" placeholder="User Password" required />
+                        </div>
+                        <div className="form-group">
+                            <label className="label" htmlFor="new-user-phone">Phone Number</label>
+                            <input type="tel" id="new-user-phone" value={userPhone} onChange={e => setUserPhone(e.target.value)} className="input-field" placeholder="Phone Number" required />
+                        </div>
+                        <div className="form-group">
+                            <label className="label" htmlFor="new-user-department">Ward</label>
+                            <select id="new-user-department" value={userDepartment} onChange={e => setUserDepartment(e.target.value)} className="input-field">
+                                {wards.map(ward => (
+                                    <option key={ward} value={ward}>{ward.charAt(0).toUpperCase() + ward.slice(1)}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <button type="submit" className="button button-success" disabled={creatingUser} style={{ width: 200, alignSelf: 'center' }}>
+                            {creatingUser ? 'Creating...' : 'Create User'}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        )}
+
+        {/* Edit User Modal */}
+        {showEditUser && editUserData && (
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="card" style={{ maxWidth: 400, width: '100%', position: 'relative' }}>
+                    <button onClick={() => { setShowEditUser(false); setEditUserData(null); }} style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>&times;</button>
+                    <h2 className="section-title" style={{ textAlign: 'center' }}>Edit User</h2>
+                    <form onSubmit={handleEditSave} className="form-layout">
+                        <div className="form-group">
+                            <label className="label" htmlFor="edit-user-name">Name</label>
+                            <input type="text" id="edit-user-name" name="name" value={editUserData.name} onChange={handleEditChange} className="input-field" required />
+                        </div>
+                        <div className="form-group">
+                            <label className="label" htmlFor="edit-user-email">Email</label>
+                            <input type="email" id="edit-user-email" name="email" value={editUserData.email} onChange={handleEditChange} className="input-field" required />
+                        </div>
+                        <div className="form-group">
+                            <label className="label" htmlFor="edit-user-phone">Phone Number</label>
+                            <input type="tel" id="edit-user-phone" name="phone" value={editUserData.phone} onChange={handleEditChange} className="input-field" required />
+                        </div>
+                        <div className="form-group">
+                            <label className="label" htmlFor="edit-user-department">Ward</label>
+                            <select id="edit-user-department" name="department" value={editUserData.department} onChange={handleEditChange} className="input-field">
+                                {wards.map(ward => (
+                                    <option key={ward} value={ward}>{ward.charAt(0).toUpperCase() + ward.slice(1)}</option>
+                                ))}
+                            </select>
+                        </div>
+                                                   <button type="submit" className="button button-success" style={{ width: 200, alignSelf: 'center' }}>
+                            Save Changes
+                        </button>
+                    </form>
+                </div>
+            </div>
+        )}            {/* Delete User Confirmation Modal */}
+        {showDeleteUser && (
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="card" style={{ maxWidth: 350, width: '100%', position: 'relative', textAlign: 'center' }}>
+                    <h2 className="section-title">Delete User</h2>
+                    <p className="message-text">Are you sure you want to delete this user?</p>
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 24 }}>
+                        <button className="button button-primary" style={{ width: 100, margin: 0 }} onClick={() => { setShowDeleteUser(false); setDeleteUserId(null); }}>Cancel</button>
+                        <button className="button button-danger" style={{ width: 100, margin: 0 }} onClick={handleDeleteConfirm}>Yes</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Patient Records View Modal */}
+        {showPatientRecords && selectedUser && (
+            <UserRecordsWindow
+                user={selectedUser}
+                onClose={() => {
+                    setShowPatientRecords(false);
+                    setSelectedUser(null);
+                }}
+            />
+        )}
+
+        {/* Vendor Users Section */}
+        <div className="users-header-row" style={{ display: 'flex', alignItems: 'center', width: '100%', marginBottom: '1rem', marginTop: '2.5rem' }}>
+            <h2 className="section-title" style={{ margin: 0, textAlign: 'left', fontWeight: 800 }}>Vendor Users</h2>
+        </div>
+        {/* Vendor Users Table */}
+        {fetchingVendors ? (
+            <Spinner />
+        ) : (
+            <div className="table-responsive">
+                <table className="data-table styled-table">
+                    <thead className="table-header">
+                        <tr>
+                            <th className="table-cell-header">Name</th>
+                            <th className="table-cell-header">Email</th>
+                            <th className="table-cell-header">Phone</th>
+                            <th className="table-cell-header">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {createdVendors.length === 0 ? (
+                            <tr className="empty-table-row">
+                                <td className="empty-table-cell" colSpan={4}>
+                                    <span className="table-empty-message">No vendor users created yet.</span>
+                                </td>
+                            </tr>
+                        ) : (
+                            createdVendors.map((vendor, idx) => (
+                                <tr key={vendor._id} className={`table-row user-row${idx % 2 === 0 ? ' even-row' : ' odd-row'}`}> 
+                                    <td className="table-cell">{vendor.name}</td>
+                                    <td className="table-cell">{vendor.email}</td>
+                                    <td className="table-cell">{vendor.phone || vendor.phoneNumber || '-'}</td>
+                                    <td className="table-cell">
+                                        <div className="admin-action-row">
+                                            <button className="button button-primary admin-action-btn" onClick={() => handleEditVendorClick(vendor)}>Edit</button>
+                                            <button className="button button-danger admin-action-btn" onClick={() => handleDeleteVendorClick(vendor._id)}>Delete</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+                {/* Create Vendor User Button below vendor users table */}
+                <div style={{ textAlign: 'right', marginTop: '1rem', marginRight: '2rem' }}>
+                    <button
+                        className="button button-primary"
+                        style={{ minWidth: 160, width: 'auto', display: 'inline-block' }}
+                        onClick={() => setShowCreateVendor(true)}
+                    >
+                        Create Vendor User
+                    </button>
+                </div>
+            </div>
+        )}
+        {showEditVendor && editVendorData && (
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="card" style={{ maxWidth: 400, width: '100%', position: 'relative' }}>
+                    <button onClick={() => { setShowEditVendor(false); setEditVendorData(null); }} style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>&times;</button>
+                    <h2 className="section-title" style={{ textAlign: 'center' }}>Edit Vendor</h2>
+                    {/* Implement vendor edit form here if needed */}
+                    <div style={{ textAlign: 'center', margin: '2rem 0' }}>
+                        <span className="message-text">Edit vendor functionality coming soon.</span>
+                    </div>
+                </div>
+            </div>
+        )}
+        {showDeleteVendor && (
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="card" style={{ maxWidth: 350, width: '100%', position: 'relative', textAlign: 'center' }}>
+                    <h2 className="section-title">Delete Vendor</h2>
+                    <p className="message-text">Are you sure you want to delete this vendor?</p>
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 24 }}>
+                        <button className="button button-primary" style={{ width: 100, margin: 0 }} onClick={() => { setShowDeleteVendor(false); setDeleteVendorId(null); }}>Cancel</button>
+                        <button className="button button-danger" style={{ width: 100, margin: 0 }} onClick={handleDeleteVendorConfirm}>Yes</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Create Vendor User Modal */}
+        {showCreateVendor && (
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: '20px' }}>
+                <div className="card" style={{ maxWidth: 400, width: '100%', position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
+                    <button onClick={() => setShowCreateVendor(false)} style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>&times;</button>
+                    <h2 className="section-title" style={{ textAlign: 'center' }}>Create Vendor User</h2>
+                    <form onSubmit={handleCreateVendor} className="form-layout">
+                        <div className="form-group">
+                            <label className="label" htmlFor="vendor-name">Name</label>
+                            <input type="text" id="vendor-name" value={vendorName} onChange={e => setVendorName(e.target.value)} className="input-field" placeholder="Vendor Name" required />
+                        </div>
+                        <div className="form-group">
+                            <label className="label" htmlFor="vendor-email">Email</label>
+                            <input type="email" id="vendor-email" value={vendorEmail} onChange={e => setVendorEmail(e.target.value)} className="input-field" placeholder="Vendor Email" required />
+                        </div>
+                        <div className="form-group">
+                            <label className="label" htmlFor="vendor-password">Password</label>
+                            <input type="password" id="vendor-password" value={vendorPassword} onChange={e => setVendorPassword(e.target.value)} className="input-field" placeholder="Vendor Password" required />
+                        </div>
+                        <div className="form-group">
+                            <label className="label" htmlFor="vendor-phone">Phone Number</label>
+                            <input type="tel" id="vendor-phone" value={vendorPhone} onChange={e => setVendorPhone(e.target.value)} className="input-field" placeholder="Phone Number" required />
+                        </div>
+                        <button type="submit" className="button button-success" disabled={creatingVendor} style={{ width: 200, alignSelf: 'center' }}>
+                            {creatingVendor ? 'Creating...' : 'Create Vendor'}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        )}
+    </div>
+);
 };
 
 export default AdminDashboard;
