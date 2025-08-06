@@ -668,7 +668,7 @@ const AdminDashboard = () => {
 
         // --- PDF styles ---
         const darkColor = '#374151'; // Dark gray for borders and headers
-        const lightColor = '#E5E7EB'; // Light gray for internal borders
+        const lightColor = '#6B7280'; // Medium gray for internal borders (darker than before)
         const headerTextColor = '#FFFFFF';
         const bodyTextColor = '#111827';
         const tickColor = '#2563EB'; // Blue for the selected box
@@ -747,75 +747,97 @@ const AdminDashboard = () => {
                     font: 'helvetica',
                     textColor: bodyTextColor,
                     lineColor: lightColor,
-                    lineWidth: 0.5,
+                    lineWidth: 1, // Increased line width for better visibility
                     halign: 'center',
                     valign: 'middle',
-                    fontSize: 7, // smaller font
-                    cellPadding: 2, // less padding
+                    fontSize: 8, // Slightly increased font size for data rows
+                    cellPadding: 4, // Moderate padding for data rows
                 },
                 headStyles: {
                     fillColor: darkColor,
                     textColor: headerTextColor,
                     fontStyle: 'bold',
-                    fontSize: 7,
+                    fontSize: 7, // Keep header text smaller to fit
                     lineColor: darkColor,
-                    lineWidth: 1.5,
+                    lineWidth: 2, // Extra dark borders for headers
+                    cellPadding: 4, // Moderate padding for headers
                 },
                 columnStyles: {
-                    0: { cellWidth: 28, halign: 'center' }, // Bed No.
-                    1: { cellWidth: 28, halign: 'center' }, // IPD No.
-                    2: { cellWidth: 110, halign: 'left' }, // Patient Name
-                    3: { cellWidth: 22, halign: 'center' }, // Age
+                    0: { cellWidth: 32, halign: 'center' }, // Bed No.
+                    1: { cellWidth: 32, halign: 'center' }, // IPD No.
+                    2: { cellWidth: 90, halign: 'left' }, // Patient Name
+                    3: { cellWidth: 32, halign: 'center' }, // Age
                     // Morning meal columns
-                    4: { cellWidth: 42, halign: 'center' }, // NORMAL DIET
-                    5: { cellWidth: 42, halign: 'center' }, // UNDER 12 YEARS DIET
-                    6: { cellWidth: 42, halign: 'center' }, // SOFT DIET
-                    7: { cellWidth: 42, halign: 'center' }, // LIQUID DIET
+                    4: { cellWidth: 38, halign: 'center' }, // NORMAL DIET
+                    5: { cellWidth: 38, halign: 'center' }, // UNDER 12 YEARS DIET
+                    6: { cellWidth: 38, halign: 'center' }, // SOFT DIET
+                    7: { cellWidth: 38, halign: 'center' }, // LIQUID DIET
                     // Any one (morning extra)
-                    8: { cellWidth: 22, halign: 'center' }, // EGG
-                    9: { cellWidth: 22, halign: 'center' }, // MILK
-                    10: { cellWidth: 40, halign: 'center' }, // HIGH PROTEIN
+                    8: { cellWidth: 38, halign: 'center' }, // EGG
+                    9: { cellWidth: 38, halign: 'center' }, // MILK
+                    10: { cellWidth: 42, halign: 'center' }, // HIGH PROTEIN
                     // Snacks
-                    11: { cellWidth: 35, halign: 'center' }, // BISCUIT
-                    12: { cellWidth: 28, halign: 'center' }, // SATU
+                    11: { cellWidth: 38, halign: 'center' }, // BISCUIT
+                    12: { cellWidth: 38, halign: 'center' }, // SATU
                     // Night meal columns
-                    13: { cellWidth: 42, halign: 'center' }, // NORMAL DIET
-                    14: { cellWidth: 42, halign: 'center' }, // UNDER 12 YEARS DIET
-                    15: { cellWidth: 42, halign: 'center' }, // SOFT DIET
-                    16: { cellWidth: 42, halign: 'center' }, // LIQUID DIET
-                    17: { cellWidth: 42, halign: 'center' }, // CHAPATI DIET
+                    13: { cellWidth: 38, halign: 'center' }, // NORMAL DIET
+                    14: { cellWidth: 38, halign: 'center' }, // UNDER 12 YEARS DIET
+                    15: { cellWidth: 38, halign: 'center' }, // SOFT DIET
+                    16: { cellWidth: 38, halign: 'center' }, // LIQUID DIET
+                    17: { cellWidth: 38, halign: 'center' }, // CHAPATI DIET
                     // Any one (night extra)
-                    18: { cellWidth: 22, halign: 'center' }, // EGG
-                    19: { cellWidth: 22, halign: 'center' }, // MILK
-                    20: { cellWidth: 40, halign: 'center' }, // HIGH PROTEIN
+                    18: { cellWidth: 38, halign: 'center' }, // EGG
+                    19: { cellWidth: 38, halign: 'center' }, // MILK
+                    20: { cellWidth: 42, halign: 'center' }, // HIGH PROTEIN
                 },
-                margin: { left: 10, right: 10 },
+                margin: { left: 2.5, right: 4 },
                 didDrawCell: (data) => {
                     const darkBorderCols = [3, 7, 10, 12, 17, 20];
+                    
+                    // Draw extra dark borders for header cells
                     if (data.section === 'head') {
+                        // Draw dark borders for all header cells
+                        doc.setLineWidth(2);
+                        doc.setDrawColor(darkColor);
+                        doc.line(data.cell.x, data.cell.y, data.cell.x + data.cell.width, data.cell.y); // Top border
+                        doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height); // Bottom border
+                        doc.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height); // Left border
+                        doc.line(data.cell.x + data.cell.width, data.cell.y, data.cell.x + data.cell.width, data.cell.y + data.cell.height); // Right border
+                        
+                        // Draw medium dark borders for internal header separations
                         if (!darkBorderCols.includes(data.column.index)) {
-                            doc.setLineWidth(0.5);
+                            doc.setLineWidth(1);
                             doc.setDrawColor(lightColor);
                             doc.line(data.cell.x + data.cell.width, data.cell.y, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
-                            if (data.row.index === 0 && !data.cell.raw.rowSpan) {
-                                doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
-                            }
                         }
                     }
-
-                    if (darkBorderCols.includes(data.column.index)) {
-                        doc.setLineWidth(1.5);
-                        doc.setDrawColor(darkColor);
-                        doc.line(data.cell.x + data.cell.width, data.cell.y, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
+                    
+                    // Draw borders for body cells
+                    if (data.section === 'body') {
+                        // Draw medium dark borders for all body cells
+                        doc.setLineWidth(1);
+                        doc.setDrawColor(lightColor);
+                        doc.line(data.cell.x, data.cell.y, data.cell.x + data.cell.width, data.cell.y); // Top border
+                        doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height); // Bottom border
+                        doc.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height); // Left border
+                        doc.line(data.cell.x + data.cell.width, data.cell.y, data.cell.x + data.cell.width, data.cell.y + data.cell.height); // Right border
+                        
+                        // Draw extra dark borders for specific columns
+                        if (darkBorderCols.includes(data.column.index)) {
+                            doc.setLineWidth(2);
+                            doc.setDrawColor(darkColor);
+                            doc.line(data.cell.x + data.cell.width, data.cell.y, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
+                        }
                     }
                     
+                    // Draw selected diet boxes
                     if (data.section === 'body' && data.cell.raw === tick) {
-                        const x = data.cell.x + (data.cell.width / 2) - 5;
-                        const y = data.cell.y + (data.cell.height / 2) - 5;
+                        const x = data.cell.x + (data.cell.width / 2) - 6;
+                        const y = data.cell.y + (data.cell.height / 2) - 6;
                         doc.setFillColor(tickColor);
                         doc.setDrawColor(darkColor); // Border for the box
                         doc.setLineWidth(1);
-                        doc.rect(x, y, 10, 10, 'FD'); // FD is Fill and Draw (border)
+                        doc.rect(x, y, 12, 12, 'FD'); // FD is Fill and Draw (border) - made slightly larger
                         data.cell.text = '';
                     }
                 },
@@ -1173,7 +1195,7 @@ const AdminDashboard = () => {
         {/* Daily Report Modal */}
         {showDailyReportModal && (
             <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div className="card" style={{ maxWidth: 1000, width: '95%', position: 'relative', maxHeight: '90vh', overflowY: 'auto', padding: '32px 24px 24px 24px' }}>
+                <div className="card" style={{ maxWidth: 1600, width: '98vw', position: 'relative', maxHeight: '90vh', overflowY: 'auto', padding: '32px 24px 24px 24px' }}>
                     <button 
                         onClick={() => {
                             setShowDailyReportModal(false);
@@ -1224,7 +1246,7 @@ const AdminDashboard = () => {
                     </div>
                     {/* Report Table */}
                     {dailyReportRows.length > 0 && (
-                        <div className="table-container" style={{ maxHeight: '400px', overflowX: 'auto', overflowY: 'auto' }}>
+                        <div className="table-container" style={{ maxHeight: '400px', maxWidth: '1500px', width: '100%', overflowX: 'auto', overflowY: 'auto' }}>
                             <table className="patient-table" style={{ color: '#111', borderCollapse: 'separate', borderSpacing: 0, width: '100%' }}>
                                 <thead style={{ color: '#111' }}>
                                     <tr>
