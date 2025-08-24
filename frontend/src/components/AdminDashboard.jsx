@@ -455,36 +455,75 @@ const AdminDashboard = () => {
     // Download monthly report as PDF
     const handleDownloadMonthlyReport = () => {
         if (!monthlyDietReport.length) return;
-        const doc = new jsPDF();
-        let y = 20;
-        doc.setFontSize(16);
-        doc.text('Monthly Diet Report', 105, y, { align: 'center' });
-        y += 10;
+        const doc = new jsPDF('p', 'pt', 'a4');
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const darkColor = '#374151';
+        const headerTextColor = '#FFFFFF';
+        const bodyTextColor = '#111827';
+
+        // Title
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(18);
+        doc.setTextColor(bodyTextColor);
+        doc.text('Monthly Diet Report', pageWidth / 2, 40, { align: 'center' });
+        doc.setFont('helvetica', 'normal');
         doc.setFontSize(12);
-        doc.text(`Year: ${selectedReportYear}  Month: ${nepaliMonths.find(m => m.number === selectedReportMonth)?.name || ''}`, 105, y, { align: 'center' });
-        y += 10;
-        // Table headers
-        doc.setFontSize(12);
-        doc.text('Diet', 20, y);
-        doc.text('Orders', 120, y);
-        y += 8;
-        // Helper to print main and sub rows
-        const printMain = (main, subs, data) => {
-            doc.setFont(undefined, 'bold');
-            doc.text(main, 20, y);
-            y += 7;
-            doc.setFont(undefined, 'normal');
-            subs.forEach(sub => {
-                doc.text(sub, 28, y);
-                doc.text(String(data[sub] || 0), 120, y);
-                y += 7;
-            });
-        };
-        printMain('Morning meal', ['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet'], monthlyDietReport[0].morning);
-        printMain('Any one', ['Egg', 'Milk', 'High protein'], monthlyDietReport[0].morningExtra);
-        printMain('Snacks', ['Biscuit', 'Satu'], monthlyDietReport[0].launch);
-        printMain('Night Meal (any one)', ['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet', 'Chapati diet'], monthlyDietReport[0].night);
-        printMain('Any one', ['Egg', 'Milk', 'High protein'], monthlyDietReport[0].nightExtra);
+        doc.text(`Year: ${selectedReportYear}  Month: ${nepaliMonths.find(m => m.number === selectedReportMonth)?.name || ''}`, pageWidth / 2, 60, { align: 'center' });
+
+        const data = monthlyDietReport[0];
+        const sec = (title) => [[{ content: title, colSpan: 2, styles: { fillColor: '#f5f5f5', fontStyle: 'bold', halign: 'left' } }]];
+        const row = (label, value) => [label, String(value || 0)];
+
+        autoTable(doc, {
+            startY: 80,
+            head: [[{ content: 'Diet', styles: { fontStyle: 'bold' } }, { content: 'Orders', styles: { fontStyle: 'bold' } }]],
+            body: [
+                ...sec('Morning meal'),
+                row('Normal diet', data.morning['Normal diet'] || 0),
+                row('Under 12 years diet', data.morning['Under 12 years diet'] || 0),
+                row('Soft diet', data.morning['Soft diet'] || 0),
+                row('Liquid diet', data.morning['Liquid diet'] || 0),
+                ...sec('Any one'),
+                row('Egg', data.morningExtra['Egg'] || 0),
+                row('Milk', data.morningExtra['Milk'] || 0),
+                row('High protein', data.morningExtra['High protein'] || 0),
+                ...sec('Snacks'),
+                row('Biscuit', data.launch['Biscuit'] || 0),
+                row('Satu', data.launch['Satu'] || 0),
+                ...sec('Night Meal (any one)'),
+                row('Normal diet', data.night['Normal diet'] || 0),
+                row('Under 12 years diet', data.night['Under 12 years diet'] || 0),
+                row('Soft diet', data.night['Soft diet'] || 0),
+                row('Liquid diet', data.night['Liquid diet'] || 0),
+                row('Chapati diet', data.night['Chapati diet'] || 0),
+                ...sec('Any one'),
+                row('Egg', data.nightExtra['Egg'] || 0),
+                row('Milk', data.nightExtra['Milk'] || 0),
+                row('High protein', data.nightExtra['High protein'] || 0),
+            ],
+            theme: 'grid',
+            styles: {
+                font: 'helvetica',
+                textColor: bodyTextColor,
+                lineColor: '#E5E7EB',
+                lineWidth: 1,
+                fontSize: 10,
+                halign: 'left',
+                cellPadding: 6,
+            },
+            headStyles: {
+                fillColor: darkColor,
+                textColor: headerTextColor,
+                fontStyle: 'bold',
+                halign: 'left',
+            },
+            columnStyles: {
+                0: { cellWidth: 300 },
+                1: { halign: 'center' },
+            },
+            margin: { left: 40, right: 40 },
+        });
+
         doc.save(`Monthly_Diet_Report_${selectedReportYear}_${selectedReportMonth}.pdf`);
     };
 
@@ -737,9 +776,46 @@ const AdminDashboard = () => {
                 row.nightExtra === 'High protein' ? tick : '',
             ]);
 
+            // Compute totals for this ward
+            const totals = patients.reduce((acc, p) => {
+                acc.morningNormal += p.morningMeal === 'Normal diet' ? 1 : 0;
+                acc.morningUnder12 += p.morningMeal === 'Under 12 years diet' ? 1 : 0;
+                acc.morningSoft += p.morningMeal === 'Soft diet' ? 1 : 0;
+                acc.morningLiquid += p.morningMeal === 'Liquid diet' ? 1 : 0;
+                acc.morningEgg += p.morningExtra === 'Egg' ? 1 : 0;
+                acc.morningMilk += p.morningExtra === 'Milk' ? 1 : 0;
+                acc.morningHighProtein += p.morningExtra === 'High protein' ? 1 : 0;
+                acc.snackBiscuit += p.launch === 'Biscuit' ? 1 : 0;
+                acc.snackSatu += p.launch === 'Satu' ? 1 : 0;
+                acc.nightNormal += p.nightMeal === 'Normal diet' ? 1 : 0;
+                acc.nightUnder12 += p.nightMeal === 'Under 12 years diet' ? 1 : 0;
+                acc.nightSoft += p.nightMeal === 'Soft diet' ? 1 : 0;
+                acc.nightLiquid += p.nightMeal === 'Liquid diet' ? 1 : 0;
+                acc.nightChapati += p.nightMeal === 'Chapati diet' ? 1 : 0;
+                acc.nightEgg += p.nightExtra === 'Egg' ? 1 : 0;
+                acc.nightMilk += p.nightExtra === 'Milk' ? 1 : 0;
+                acc.nightHighProtein += p.nightExtra === 'High protein' ? 1 : 0;
+                return acc;
+            }, {
+                morningNormal: 0, morningUnder12: 0, morningSoft: 0, morningLiquid: 0,
+                morningEgg: 0, morningMilk: 0, morningHighProtein: 0,
+                snackBiscuit: 0, snackSatu: 0,
+                nightNormal: 0, nightUnder12: 0, nightSoft: 0, nightLiquid: 0, nightChapati: 0,
+                nightEgg: 0, nightMilk: 0, nightHighProtein: 0,
+            });
+
+            const totalsRow = [
+                { content: 'TOTAL', colSpan: 4, styles: { fontStyle: 'bold', halign: 'center' } },
+                totals.morningNormal, totals.morningUnder12, totals.morningSoft, totals.morningLiquid,
+                totals.morningEgg, totals.morningMilk, totals.morningHighProtein,
+                totals.snackBiscuit, totals.snackSatu,
+                totals.nightNormal, totals.nightUnder12, totals.nightSoft, totals.nightLiquid, totals.nightChapati,
+                totals.nightEgg, totals.nightMilk, totals.nightHighProtein,
+            ];
+
             autoTable(doc, {
                 head,
-                body,
+                body: [...body, totalsRow],
                 startY,
                 theme: 'grid',
                 rowPageBreak: 'avoid',
@@ -747,97 +823,84 @@ const AdminDashboard = () => {
                     font: 'helvetica',
                     textColor: bodyTextColor,
                     lineColor: lightColor,
-                    lineWidth: 1, // Increased line width for better visibility
+                    lineWidth: 1,
                     halign: 'center',
                     valign: 'middle',
-                    fontSize: 8, // Slightly increased font size for data rows
-                    cellPadding: 4, // Moderate padding for data rows
+                    fontSize: 8,
+                    cellPadding: 4,
                 },
                 headStyles: {
                     fillColor: darkColor,
                     textColor: headerTextColor,
                     fontStyle: 'bold',
-                    fontSize: 7, // Keep header text smaller to fit
+                    fontSize: 7,
                     lineColor: darkColor,
-                    lineWidth: 2, // Extra dark borders for headers
-                    cellPadding: 4, // Moderate padding for headers
+                    lineWidth: 2,
+                    cellPadding: 4,
                 },
                 columnStyles: {
-                    0: { cellWidth: 32, halign: 'center' }, // Bed No.
-                    1: { cellWidth: 32, halign: 'center' }, // IPD No.
-                    2: { cellWidth: 90, halign: 'left' }, // Patient Name
-                    3: { cellWidth: 32, halign: 'center' }, // Age
-                    // Morning meal columns
-                    4: { cellWidth: 38, halign: 'center' }, // NORMAL DIET
-                    5: { cellWidth: 38, halign: 'center' }, // UNDER 12 YEARS DIET
-                    6: { cellWidth: 38, halign: 'center' }, // SOFT DIET
-                    7: { cellWidth: 38, halign: 'center' }, // LIQUID DIET
-                    // Any one (morning extra)
-                    8: { cellWidth: 38, halign: 'center' }, // EGG
-                    9: { cellWidth: 38, halign: 'center' }, // MILK
-                    10: { cellWidth: 42, halign: 'center' }, // HIGH PROTEIN
-                    // Snacks
-                    11: { cellWidth: 38, halign: 'center' }, // BISCUIT
-                    12: { cellWidth: 38, halign: 'center' }, // SATU
-                    // Night meal columns
-                    13: { cellWidth: 38, halign: 'center' }, // NORMAL DIET
-                    14: { cellWidth: 38, halign: 'center' }, // UNDER 12 YEARS DIET
-                    15: { cellWidth: 38, halign: 'center' }, // SOFT DIET
-                    16: { cellWidth: 38, halign: 'center' }, // LIQUID DIET
-                    17: { cellWidth: 38, halign: 'center' }, // CHAPATI DIET
-                    // Any one (night extra)
-                    18: { cellWidth: 38, halign: 'center' }, // EGG
-                    19: { cellWidth: 38, halign: 'center' }, // MILK
-                    20: { cellWidth: 42, halign: 'center' }, // HIGH PROTEIN
+                    0: { cellWidth: 32, halign: 'center' },
+                    1: { cellWidth: 32, halign: 'center' },
+                    2: { cellWidth: 90, halign: 'left' },
+                    3: { cellWidth: 32, halign: 'center' },
+                    4: { cellWidth: 38, halign: 'center' },
+                    5: { cellWidth: 38, halign: 'center' },
+                    6: { cellWidth: 38, halign: 'center' },
+                    7: { cellWidth: 38, halign: 'center' },
+                    8: { cellWidth: 38, halign: 'center' },
+                    9: { cellWidth: 38, halign: 'center' },
+                    10: { cellWidth: 42, halign: 'center' },
+                    11: { cellWidth: 38, halign: 'center' },
+                    12: { cellWidth: 38, halign: 'center' },
+                    13: { cellWidth: 38, halign: 'center' },
+                    14: { cellWidth: 38, halign: 'center' },
+                    15: { cellWidth: 38, halign: 'center' },
+                    16: { cellWidth: 38, halign: 'center' },
+                    17: { cellWidth: 38, halign: 'center' },
+                    18: { cellWidth: 37, halign: 'center' },
+                    19: { cellWidth: 42, halign: 'center' },
                 },
-                margin: { left: 2.5, right: 4 },
+                margin: { left: 2.5, right: 0.2 },
                 didDrawCell: (data) => {
                     const darkBorderCols = [3, 7, 10, 12, 17, 20];
-                    
-                    // Draw extra dark borders for header cells
+
                     if (data.section === 'head') {
-                        // Draw dark borders for all header cells
                         doc.setLineWidth(2);
                         doc.setDrawColor(darkColor);
-                        doc.line(data.cell.x, data.cell.y, data.cell.x + data.cell.width, data.cell.y); // Top border
-                        doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height); // Bottom border
-                        doc.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height); // Left border
-                        doc.line(data.cell.x + data.cell.width, data.cell.y, data.cell.x + data.cell.width, data.cell.y + data.cell.height); // Right border
-                        
-                        // Draw medium dark borders for internal header separations
+                        doc.line(data.cell.x, data.cell.y, data.cell.x + data.cell.width, data.cell.y);
+                        doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
+                        doc.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height);
+                        doc.line(data.cell.x + data.cell.width, data.cell.y, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
+
                         if (!darkBorderCols.includes(data.column.index)) {
                             doc.setLineWidth(1);
                             doc.setDrawColor(lightColor);
                             doc.line(data.cell.x + data.cell.width, data.cell.y, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
                         }
                     }
-                    
-                    // Draw borders for body cells
+
                     if (data.section === 'body') {
-                        // Draw medium dark borders for all body cells
                         doc.setLineWidth(1);
                         doc.setDrawColor(lightColor);
-                        doc.line(data.cell.x, data.cell.y, data.cell.x + data.cell.width, data.cell.y); // Top border
-                        doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height); // Bottom border
-                        doc.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height); // Left border
-                        doc.line(data.cell.x + data.cell.width, data.cell.y, data.cell.x + data.cell.width, data.cell.y + data.cell.height); // Right border
-                        
-                        // Draw extra dark borders for specific columns
+                        doc.line(data.cell.x, data.cell.y, data.cell.x + data.cell.width, data.cell.y);
+                        doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
+                        doc.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height);
+                        doc.line(data.cell.x + data.cell.width, data.cell.y, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
+
                         if (darkBorderCols.includes(data.column.index)) {
                             doc.setLineWidth(2);
                             doc.setDrawColor(darkColor);
                             doc.line(data.cell.x + data.cell.width, data.cell.y, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
                         }
                     }
-                    
-                    // Draw selected diet boxes
+
                     if (data.section === 'body' && data.cell.raw === tick) {
                         const x = data.cell.x + (data.cell.width / 2) - 6;
                         const y = data.cell.y + (data.cell.height / 2) - 6;
                         doc.setFillColor(tickColor);
-                        doc.setDrawColor(darkColor); // Border for the box
+                        doc.setDrawColor(darkColor);
                         doc.setLineWidth(1);
-                        doc.rect(x, y, 12, 12, 'FD'); // FD is Fill and Draw (border) - made slightly larger
+                        doc.rect(x, y, 12, 12, 'FD');
                         data.cell.text = '';
                     }
                 },
@@ -872,6 +935,52 @@ const AdminDashboard = () => {
                     startY = 40;
                 }
             }
+
+            // Overall daily summary across all wards
+            const totals = dailyReportRows.reduce((acc, p) => {
+                acc.morning[p.morningMeal] = (acc.morning[p.morningMeal] || 0) + (p.morningMeal ? 1 : 0);
+                acc.morningExtra[p.morningExtra] = (acc.morningExtra[p.morningExtra] || 0) + (p.morningExtra ? 1 : 0);
+                acc.launch[p.launch] = (acc.launch[p.launch] || 0) + (p.launch ? 1 : 0);
+                acc.night[p.nightMeal] = (acc.night[p.nightMeal] || 0) + (p.nightMeal ? 1 : 0);
+                acc.nightExtra[p.nightExtra] = (acc.nightExtra[p.nightExtra] || 0) + (p.nightExtra ? 1 : 0);
+                return acc;
+            }, { morning: {}, morningExtra: {}, launch: {}, night: {}, nightExtra: {} });
+
+            const sec = (title) => [[{ content: title, colSpan: 2, styles: { fillColor: '#f5f5f5', fontStyle: 'bold', halign: 'left' } }]];
+            const row = (label, value) => [label, String(value || 0)];
+
+            autoTable(doc, {
+                startY: (doc.lastAutoTable ? doc.lastAutoTable.finalY + 20 : 80),
+                theme: 'grid',
+                head: [[{ content: 'Daily diet summary', colSpan: 2, styles: { halign: 'center', fontStyle: 'bold' } }]],
+                body: [
+                    ...sec('Morning meal'),
+                    row('Normal diet', totals.morning['Normal diet'] || 0),
+                    row('Under 12 years diet', totals.morning['Under 12 years diet'] || 0),
+                    row('Soft diet', totals.morning['Soft diet'] || 0),
+                    row('Liquid diet', totals.morning['Liquid diet'] || 0),
+                    ...sec('Any one'),
+                    row('Egg', totals.morningExtra['Egg'] || 0),
+                    row('Milk', totals.morningExtra['Milk'] || 0),
+                    row('High protein', totals.morningExtra['High protein'] || 0),
+                    ...sec('Snacks'),
+                    row('Biscuit', totals.launch['Biscuit'] || 0),
+                    row('Satu', totals.launch['Satu'] || 0),
+                    ...sec('Night Meal (any one)'),
+                    row('Normal diet', totals.night['Normal diet'] || 0),
+                    row('Under 12 years diet', totals.night['Under 12 years diet'] || 0),
+                    row('Soft diet', totals.night['Soft diet'] || 0),
+                    row('Liquid diet', totals.night['Liquid diet'] || 0),
+                    row('Chapati diet', totals.night['Chapati diet'] || 0),
+                    ...sec('Any one'),
+                    row('Egg', totals.nightExtra['Egg'] || 0),
+                    row('Milk', totals.nightExtra['Milk'] || 0),
+                    row('High protein', totals.nightExtra['High protein'] || 0),
+                ],
+                styles: { font: 'helvetica', fontSize: 9, halign: 'left' },
+                columnStyles: { 0: { cellWidth: 180 }, 1: { halign: 'center' } },
+                margin: { left: 60, right: 60 },
+            });
         } else {
             processWard(dailyReportRows, dailyReportWard, 80);
         }
@@ -1339,12 +1448,128 @@ const AdminDashboard = () => {
                                             ))}
                                         </tr>
                                     ))}
+                                    {/* Totals Row */}
+                                    {(() => {
+                                        const totals = dailyReportRows.reduce((acc, p) => {
+                                            // Morning
+                                            acc.morningNormal += p.morningMeal === 'Normal diet' ? 1 : 0;
+                                            acc.morningUnder12 += p.morningMeal === 'Under 12 years diet' ? 1 : 0;
+                                            acc.morningSoft += p.morningMeal === 'Soft diet' ? 1 : 0;
+                                            acc.morningLiquid += p.morningMeal === 'Liquid diet' ? 1 : 0;
+                                            // Morning extra
+                                            acc.morningEgg += p.morningExtra === 'Egg' ? 1 : 0;
+                                            acc.morningMilk += p.morningExtra === 'Milk' ? 1 : 0;
+                                            acc.morningHighProtein += p.morningExtra === 'High protein' ? 1 : 0;
+                                            // Snacks
+                                            acc.snackBiscuit += p.launch === 'Biscuit' ? 1 : 0;
+                                            acc.snackSatu += p.launch === 'Satu' ? 1 : 0;
+                                            // Night
+                                            acc.nightNormal += p.nightMeal === 'Normal diet' ? 1 : 0;
+                                            acc.nightUnder12 += p.nightMeal === 'Under 12 years diet' ? 1 : 0;
+                                            acc.nightSoft += p.nightMeal === 'Soft diet' ? 1 : 0;
+                                            acc.nightLiquid += p.nightMeal === 'Liquid diet' ? 1 : 0;
+                                            acc.nightChapati += p.nightMeal === 'Chapati diet' ? 1 : 0;
+                                            // Night extra
+                                            acc.nightEgg += p.nightExtra === 'Egg' ? 1 : 0;
+                                            acc.nightMilk += p.nightExtra === 'Milk' ? 1 : 0;
+                                            acc.nightHighProtein += p.nightExtra === 'High protein' ? 1 : 0;
+                                            return acc;
+                                        }, {
+                                            morningNormal: 0, morningUnder12: 0, morningSoft: 0, morningLiquid: 0,
+                                            morningEgg: 0, morningMilk: 0, morningHighProtein: 0,
+                                            snackBiscuit: 0, snackSatu: 0,
+                                            nightNormal: 0, nightUnder12: 0, nightSoft: 0, nightLiquid: 0, nightChapati: 0,
+                                            nightEgg: 0, nightMilk: 0, nightHighProtein: 0,
+                                        });
+                                        return (
+                                            <tr style={{ background: '#f9fafb' }}>
+                                                <td className="table-cell" colSpan={4} style={{ fontWeight: 800, textAlign: 'center', borderLeft: '3px solid #374151', borderTop: '3px solid #374151', borderRight: '3px solid #374151', color: '#111' }}>TOTAL</td>
+                                                <td className="table-cell diet-cell light-border" style={{ borderTop: '3px solid #374151' }}>{totals.morningNormal}</td>
+                                                <td className="table-cell diet-cell light-border" style={{ borderTop: '3px solid #374151' }}>{totals.morningUnder12}</td>
+                                                <td className="table-cell diet-cell light-border" style={{ borderTop: '3px solid #374151' }}>{totals.morningSoft}</td>
+                                                <td className="table-cell diet-cell dark-border" style={{ borderTop: '3px solid #374151', borderRight: '3px solid #374151' }}>{totals.morningLiquid}</td>
+                                                <td className="table-cell diet-cell light-border" style={{ borderTop: '3px solid #374151' }}>{totals.morningEgg}</td>
+                                                <td className="table-cell diet-cell dark-border" style={{ borderTop: '3px solid #374151' }}>{totals.morningMilk}</td>
+                                                <td className="table-cell diet-cell light-border" style={{ borderTop: '3px solid #374151', borderRight: '3px solid #374151' }}>{totals.morningHighProtein}</td>
+                                                <td className="table-cell diet-cell light-border" style={{ borderTop: '3px solid #374151' }}>{totals.snackBiscuit}</td>
+                                                <td className="table-cell diet-cell dark-border" style={{ borderTop: '3px solid #374151', borderRight: '3px solid #374151' }}>{totals.snackSatu}</td>
+                                                <td className="table-cell diet-cell light-border" style={{ borderTop: '3px solid #374151' }}>{totals.nightNormal}</td>
+                                                <td className="table-cell diet-cell light-border" style={{ borderTop: '3px solid #374151' }}>{totals.nightUnder12}</td>
+                                                <td className="table-cell diet-cell light-border" style={{ borderTop: '3px solid #374151' }}>{totals.nightSoft}</td>
+                                                <td className="table-cell diet-cell light-border" style={{ borderTop: '3px solid #374151' }}>{totals.nightLiquid}</td>
+                                                <td className="table-cell diet-cell dark-border" style={{ borderTop: '3px solid #374151', borderRight: '3px solid #374151' }}>{totals.nightChapati}</td>
+                                                <td className="table-cell diet-cell light-border" style={{ borderTop: '3px solid #374151' }}>{totals.nightEgg}</td>
+                                                <td className="table-cell diet-cell" style={{ borderTop: '3px solid #374151' }}>{totals.nightMilk}</td>
+                                                <td className="table-cell diet-cell" style={{ borderTop: '3px solid #374151', borderRight: '3px solid #374151' }}>{totals.nightHighProtein}</td>
+                                            </tr>
+                                        );
+                                    })()}
                                     {/* Add bottom border to the last row */}
                                     <tr>
                                         <td colSpan={24} style={{ borderBottom: '3px solid #374151', padding: 0, height: 0 }}></td>
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+                    )}
+                    {/* All Wards Daily Summary */}
+                    {dailyReportRows.length > 0 && dailyReportWard === 'ALL_WARDS' && (
+                        <div style={{ marginTop: '16px' }}>
+                            <div className="table-responsive" style={{ display: 'flex', justifyContent: 'center' }}>
+                                <table className="data-table" style={{ width: '100%', maxWidth: 520, color: '#111' }}>
+                                    <thead>
+                                        <tr>
+                                            <th className="table-cell-header">Diet</th>
+                                            <th className="table-cell-header">Orders</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody style={{ color: '#111' }}>
+                                        {(() => {
+                                            const totals = dailyReportRows.reduce((acc, p) => {
+                                                // Morning
+                                                acc.morning[ p.morningMeal ] = (acc.morning[ p.morningMeal ] || 0) + (p.morningMeal ? 1 : 0);
+                                                // Morning extra
+                                                acc.morningExtra[ p.morningExtra ] = (acc.morningExtra[ p.morningExtra ] || 0) + (p.morningExtra ? 1 : 0);
+                                                // Snacks
+                                                acc.launch[ p.launch ] = (acc.launch[ p.launch ] || 0) + (p.launch ? 1 : 0);
+                                                // Night
+                                                acc.night[ p.nightMeal ] = (acc.night[ p.nightMeal ] || 0) + (p.nightMeal ? 1 : 0);
+                                                // Night extra
+                                                acc.nightExtra[ p.nightExtra ] = (acc.nightExtra[ p.nightExtra ] || 0) + (p.nightExtra ? 1 : 0);
+                                                return acc;
+                                            }, { morning: {}, morningExtra: {}, launch: {}, night: {}, nightExtra: {} });
+                                            const safe = (obj, key) => obj[key] || 0;
+                                            return (
+                                                <>
+                                                    <tr><td colSpan="2" style={{ fontWeight: 800, background: '#f5f5f5', textAlign: 'center' }}>Daily diet summary</td></tr>
+                                                    <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Morning meal</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>Normal diet</td><td>{safe(totals.morning, 'Normal diet')}</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>Under 12 years diet</td><td>{safe(totals.morning, 'Under 12 years diet')}</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>Soft diet</td><td>{safe(totals.morning, 'Soft diet')}</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>Liquid diet</td><td>{safe(totals.morning, 'Liquid diet')}</td></tr>
+                                                    <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Any one</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>Egg</td><td>{safe(totals.morningExtra, 'Egg')}</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>Milk</td><td>{safe(totals.morningExtra, 'Milk')}</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>High protein</td><td>{safe(totals.morningExtra, 'High protein')}</td></tr>
+                                                    <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Snacks</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>Biscuit</td><td>{safe(totals.launch, 'Biscuit')}</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>Satu</td><td>{safe(totals.launch, 'Satu')}</td></tr>
+                                                    <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Night Meal (any one)</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>Normal diet</td><td>{safe(totals.night, 'Normal diet')}</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>Under 12 years diet</td><td>{safe(totals.night, 'Under 12 years diet')}</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>Soft diet</td><td>{safe(totals.night, 'Soft diet')}</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>Liquid diet</td><td>{safe(totals.night, 'Liquid diet')}</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>Chapati diet</td><td>{safe(totals.night, 'Chapati diet')}</td></tr>
+                                                    <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Any one</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>Egg</td><td>{safe(totals.nightExtra, 'Egg')}</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>Milk</td><td>{safe(totals.nightExtra, 'Milk')}</td></tr>
+                                                    <tr><td style={{ paddingLeft: 24 }}>High protein</td><td>{safe(totals.nightExtra, 'High protein')}</td></tr>
+                                                </>
+                                            );
+                                        })()}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     )}
                     {dailyReportLoading && (

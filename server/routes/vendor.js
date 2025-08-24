@@ -90,6 +90,28 @@ router.get('/records/by-date', protect, async (req, res) => {
   }
 });
 
+// Get all patient records for a date range, for monthly reports (for vendor)
+router.get('/records/by-range', protect, async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    if (!start || !end) {
+      return res.status(400).json({ error: 'Start and end dates are required in query parameters' });
+    }
+    
+    // Find all patient records within the date range
+    const records = await PatientRecord.find({
+      date: {
+        $gte: start,
+        $lte: end
+      }
+    }).populate('userId', 'department');
+    
+    res.json({ records });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get all wards (for vendor and admin)
 router.get('/wards', protect, async (req, res) => {
   try {
