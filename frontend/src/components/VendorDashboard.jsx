@@ -138,7 +138,7 @@ const VendorDashboard = () => {
     fetchPatients();
   }, [API_BASE_URL, selectedDate, showToast]);
 
-  // Function to generate the monthly diet report
+  // Function to generate the monthly diet report (Diet × Ward × Orders), mirroring Admin
   const generateMonthlyDietReport = async () => {
     if (!selectedReportYear || !selectedReportMonth) return;
     setMonthlyReportLoading(true);
@@ -147,48 +147,70 @@ const VendorDashboard = () => {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       };
       const { start, end } = convertBSMonthToADRange(selectedReportYear, selectedReportMonth);
-      
-      // Initialize counters for each diet type in each meal
-      const dietCounts = {
-        morning: { 'Normal diet': 0, 'Under 12 years diet': 0, 'Soft diet': 0, 'Liquid diet': 0 },
-        morningExtra: { Egg: 0, Milk: 0, 'High protein': 0 },
-        launch: { Biscuit: 0, Satu: 0 },
-        night: { 'Normal diet': 0, 'Under 12 years diet': 0, 'Soft diet': 0, 'Liquid diet': 0, 'Chapati diet': 0 },
-        nightExtra: { Egg: 0, Milk: 0, 'High protein': 0 }
+
+      // Use wards from state to maintain consistent column ordering
+      const wardList = (wards || []).map(w => w.name);
+      const zeroWardMap = () => wardList.reduce((acc, w) => { acc[w] = 0; return acc; }, {});
+
+      // Matrix structure identical to Admin
+      const matrix = {
+        morning: {
+          'Normal diet': zeroWardMap(),
+          'Under 12 years diet': zeroWardMap(),
+          'Soft diet': zeroWardMap(),
+          'Liquid diet': zeroWardMap(),
+        },
+        morningExtra: {
+          'Egg': zeroWardMap(),
+          'Milk': zeroWardMap(),
+          'High protein': zeroWardMap(),
+        },
+        launch: {
+          'Biscuit': zeroWardMap(),
+          'Satu': zeroWardMap(),
+        },
+        night: {
+          'Normal diet': zeroWardMap(),
+          'Under 12 years diet': zeroWardMap(),
+          'Soft diet': zeroWardMap(),
+          'Liquid diet': zeroWardMap(),
+          'Chapati diet': zeroWardMap(),
+        },
+        nightExtra: {
+          'Egg': zeroWardMap(),
+          'Milk': zeroWardMap(),
+          'High protein': zeroWardMap(),
+        },
       };
-      
+
       // Fetch all records for the date range
       const res = await axios.get(`${API_BASE_URL}/vendor/records/by-range?start=${start}&end=${end}`, config);
       const records = res.data.records || [];
-      
-      // Aggregate data for all records
+
+      // Aggregate per ward
       for (const record of records) {
+        const wardName = record.userId?.department;
+        if (!wardName) continue;
         for (const patient of record.patients) {
-          // Count morning meals
-          if (patient.morningMeal && dietCounts.morning.hasOwnProperty(patient.morningMeal)) {
-            dietCounts.morning[patient.morningMeal]++;
+          if (patient.morningMeal && matrix.morning[patient.morningMeal]) {
+            matrix.morning[patient.morningMeal][wardName] = (matrix.morning[patient.morningMeal][wardName] || 0) + 1;
           }
-          // Count morning extras
-          if (patient.morningExtra && dietCounts.morningExtra.hasOwnProperty(patient.morningExtra)) {
-            dietCounts.morningExtra[patient.morningExtra]++;
+          if (patient.morningExtra && matrix.morningExtra[patient.morningExtra]) {
+            matrix.morningExtra[patient.morningExtra][wardName] = (matrix.morningExtra[patient.morningExtra][wardName] || 0) + 1;
           }
-          // Count launch
-          if (patient.launch && dietCounts.launch.hasOwnProperty(patient.launch)) {
-            dietCounts.launch[patient.launch]++;
+          if (patient.launch && matrix.launch[patient.launch]) {
+            matrix.launch[patient.launch][wardName] = (matrix.launch[patient.launch][wardName] || 0) + 1;
           }
-          // Count night meals
-          if (patient.nightMeal && dietCounts.night.hasOwnProperty(patient.nightMeal)) {
-            dietCounts.night[patient.nightMeal]++;
+          if (patient.nightMeal && matrix.night[patient.nightMeal]) {
+            matrix.night[patient.nightMeal][wardName] = (matrix.night[patient.nightMeal][wardName] || 0) + 1;
           }
-          // Count night extras
-          if (patient.nightExtra && dietCounts.nightExtra.hasOwnProperty(patient.nightExtra)) {
-            dietCounts.nightExtra[patient.nightExtra]++;
+          if (patient.nightExtra && matrix.nightExtra[patient.nightExtra]) {
+            matrix.nightExtra[patient.nightExtra][wardName] = (matrix.nightExtra[patient.nightExtra][wardName] || 0) + 1;
           }
         }
       }
-      
-      // The table expects an array with a single object in this grouped format
-      setMonthlyReportData([{ ...dietCounts }]);
+
+      setMonthlyReportData([{ matrix, wards: wardList }]);
     } catch (error) {
       console.error("Error generating monthly report:", error);
       showToast('Error generating monthly report', 'error');
@@ -198,10 +220,11 @@ const VendorDashboard = () => {
     }
   };
 
-  // Download monthly report as PDF
+  // Download monthly report as PDF (professional matrix like Admin)
   const handleDownloadMonthlyReport = () => {
     if (!monthlyReportData.length) return;
-    const doc = new jsPDF('p', 'pt', 'a4');
+    const { matrix, wards: wardList } = monthlyReportData[0];
+    const doc = new jsPDF('l', 'pt', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
     const darkColor = '#374151';
     const headerTextColor = '#FFFFFF';
@@ -216,58 +239,42 @@ const VendorDashboard = () => {
     doc.setFontSize(12);
     doc.text(`Year: ${selectedReportYear}  Month: ${nepaliMonths.find(m => m.number === selectedReportMonth)?.name || ''}`, pageWidth / 2, 60, { align: 'center' });
 
-    const data = monthlyReportData[0];
-    const sec = (title) => [[{ content: title, colSpan: 2, styles: { fillColor: '#f5f5f5', fontStyle: 'bold', halign: 'left' } }]];
-    const row = (label, value) => [label, String(value || 0)];
+    const buildSection = (title, dietsObj) => {
+      const head = [['Diet', ...wardList, 'Total']];
+      const body = [];
+      body.push([{ content: title, colSpan: head[0].length, styles: { fillColor: '#f5f5f5', fontStyle: 'bold', halign: 'left' } }]);
+      Object.keys(dietsObj).forEach(dietName => {
+        const wardCounts = wardList.map(w => dietsObj[dietName][w] || 0);
+        const total = wardCounts.reduce((a, b) => a + b, 0);
+        body.push([dietName, ...wardCounts.map(String), String(total)]);
+      });
+      return { head, body };
+    };
 
-    autoTable(doc, {
-      startY: 80,
-      head: [[{ content: 'Diet', styles: { fontStyle: 'bold' } }, { content: 'Orders', styles: { fontStyle: 'bold' } }]],
-      body: [
-        ...sec('Morning meal'),
-        row('Normal diet', data.morning['Normal diet'] || 0),
-        row('Under 12 years diet', data.morning['Under 12 years diet'] || 0),
-        row('Soft diet', data.morning['Soft diet'] || 0),
-        row('Liquid diet', data.morning['Liquid diet'] || 0),
-        ...sec('Any one'),
-        row('Egg', data.morningExtra['Egg'] || 0),
-        row('Milk', data.morningExtra['Milk'] || 0),
-        row('High protein', data.morningExtra['High protein'] || 0),
-        ...sec('Snacks'),
-        row('Biscuit', data.launch['Biscuit'] || 0),
-        row('Satu', data.launch['Satu'] || 0),
-        ...sec('Night Meal (any one)'),
-        row('Normal diet', data.night['Normal diet'] || 0),
-        row('Under 12 years diet', data.night['Under 12 years diet'] || 0),
-        row('Soft diet', data.night['Soft diet'] || 0),
-        row('Liquid diet', data.night['Liquid diet'] || 0),
-        row('Chapati diet', data.night['Chapati diet'] || 0),
-        ...sec('Any one'),
-        row('Egg', data.nightExtra['Egg'] || 0),
-        row('Milk', data.nightExtra['Milk'] || 0),
-        row('High protein', data.nightExtra['High protein'] || 0),
-      ],
-      theme: 'grid',
-      styles: {
-        font: 'helvetica',
-        textColor: bodyTextColor,
-        lineColor: '#E5E7EB',
-        lineWidth: 1,
-        fontSize: 10,
-        halign: 'left',
-        cellPadding: 6,
-      },
-      headStyles: {
-        fillColor: darkColor,
-        textColor: headerTextColor,
-        fontStyle: 'bold',
-        halign: 'left',
-      },
-      columnStyles: {
-        0: { cellWidth: 300 },
-        1: { halign: 'center' },
-      },
-      margin: { left: 40, right: 40 },
+    const sections = [
+      ['Morning meal', matrix.morning],
+      ['Any one', matrix.morningExtra],
+      ['Snacks', matrix.launch],
+      ['Night Meal (any one)', matrix.night],
+      ['Any one', matrix.nightExtra],
+    ];
+
+    let startY = 80;
+    sections.forEach(([title, diets]) => {
+      const { head, body } = buildSection(title, diets);
+      autoTable(doc, {
+        startY,
+        head,
+        body,
+        theme: 'grid',
+        styles: { font: 'helvetica', textColor: bodyTextColor, lineColor: '#E5E7EB', lineWidth: 1, fontSize: 9, cellPadding: 5 },
+        headStyles: { fillColor: darkColor, textColor: headerTextColor, fontStyle: 'bold', halign: 'center' },
+        columnStyles: { 0: { cellWidth: 160, halign: 'left' } },
+        margin: { left: 30, right: 30 },
+        didDrawPage: (data) => {
+          startY = data.cursor.y + 16;
+        },
+      });
     });
 
     doc.save(`Monthly_Diet_Report_${selectedReportYear}_${selectedReportMonth}.pdf`);
@@ -439,7 +446,7 @@ const VendorDashboard = () => {
         {/* Monthly Report Modal */}
         {showMonthlyReport && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div className="card" style={{ maxWidth: 900, width: '95%', position: 'relative', maxHeight: '90vh', overflowY: 'auto', padding: '32px 24px 24px 24px' }}>
+            <div className="card" style={{ maxWidth: 1200, width: '95vw', position: 'relative', maxHeight: '90vh', overflowY: 'auto', overflowX: 'auto', padding: '32px 24px 24px 24px' }}>
               <button 
                 onClick={() => {
                   setShowMonthlyReport(false);
@@ -491,47 +498,49 @@ const VendorDashboard = () => {
                 )}
               </div>
 
-              {/* Report Table */}
+              {/* Report Table - Matrix like Admin */}
               {monthlyReportData.length > 0 && (
-                <div style={{ maxHeight: '400px', overflowX: 'auto', overflowY: 'auto' }}>
-                  <table className="data-table" style={{ width: '100%', minWidth: '400px', color: '#111' }}>
-                    <thead>
+                (() => {
+                  const { matrix, wards: wardList } = monthlyReportData[0];
+                  const renderSection = (title, diets) => (
+                    <>
                       <tr>
-                        <th className="table-cell-header">Diet</th>
-                        <th className="table-cell-header">Orders</th>
+                        <th colSpan={2 + wardList.length} style={{ fontWeight: 700, background: '#f5f5f5', textAlign: 'left' }}>{title}</th>
                       </tr>
-                    </thead>
-                    <tbody style={{ color: '#111' }}>
-                      {/* Morning meal */}
-                      <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Morning meal</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>Normal diet</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.morning["Normal diet"] || 0}</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>Under 12 years diet</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.morning["Under 12 years diet"] || 0}</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>Soft diet</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.morning["Soft diet"] || 0}</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>Liquid diet</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.morning["Liquid diet"] || 0}</td></tr>
-                      {/* Any one (morning extras) */}
-                      <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Any one</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>Egg</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.morningExtra["Egg"] || 0}</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>Milk</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.morningExtra["Milk"] || 0}</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>High protein</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.morningExtra["High protein"] || 0}</td></tr>
-                      {/* Snacks */}
-                      <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Snacks</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>Biscuit</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.launch["Biscuit"] || 0}</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>Satu</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.launch["Satu"] || 0}</td></tr>
-                      {/* Night Meal (any one) */}
-                      <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Night Meal (any one)</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>Normal diet</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.night["Normal diet"] || 0}</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>Under 12 years diet</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.night["Under 12 years diet"] || 0}</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>Soft diet</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.night["Soft diet"] || 0}</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>Liquid diet</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.night["Liquid diet"] || 0}</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>Chapati diet</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.night["Chapati diet"] || 0}</td></tr>
-                      {/* Any one (night extras) */}
-                      <tr><td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>Any one</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>Egg</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.nightExtra["Egg"] || 0}</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>Milk</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.nightExtra["Milk"] || 0}</td></tr>
-                      <tr><td style={{ paddingLeft: 24, color: '#111' }}>High protein</td><td style={{ color: '#111' }}>{monthlyReportData[0]?.nightExtra["High protein"] || 0}</td></tr>
-                    </tbody>
-                  </table>
-                </div>
+                      {Object.keys(diets).map(dietName => (
+                        <tr key={dietName}>
+                          <td style={{ paddingLeft: 16 }}>{dietName}</td>
+                          {wardList.map(w => (
+                            <td key={w + dietName} style={{ textAlign: 'center' }}>{diets[dietName][w] || 0}</td>
+                          ))}
+                          <td style={{ fontWeight: 600, textAlign: 'center' }}>{wardList.reduce((sum, w) => sum + (diets[dietName][w] || 0), 0)}</td>
+                        </tr>
+                      ))}
+                    </>
+                  );
+                  return (
+                    <div style={{ maxHeight: '400px', overflowX: 'auto', overflowY: 'auto' }}>
+                      <table className="data-table" style={{ width: '100%', minWidth: Math.max(600, 180 + wardList.length * 100), color: '#111' }}>
+                        <thead>
+                          <tr>
+                            <th className="table-cell-header" style={{ minWidth: 160, textAlign: 'left' }}>Diet</th>
+                            {wardList.map(w => (
+                              <th key={w} className="table-cell-header" style={{ minWidth: 90, textAlign: 'center' }}>{w}</th>
+                            ))}
+                            <th className="table-cell-header" style={{ minWidth: 90, textAlign: 'center' }}>Total</th>
+                          </tr>
+                        </thead>
+                        <tbody style={{ color: '#111' }}>
+                          {renderSection('Morning meal', matrix.morning)}
+                          {renderSection('Any one', matrix.morningExtra)}
+                          {renderSection('Snacks', matrix.launch)}
+                          {renderSection('Night Meal (any one)', matrix.night)}
+                          {renderSection('Any one', matrix.nightExtra)}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()
               )}
 
               {monthlyReportLoading && (
