@@ -325,6 +325,22 @@ const UserDashboard = () => {
         setPatientRows(newRows);
     };
 
+    // Compute totals for the summary row
+    const filledPatientRows = (patientRows || []).filter(r => r && r.bedNo && r.ipdNumber && r.name && r.age);
+    const patientsCount = filledPatientRows.length;
+
+    const morningMealOptions = ['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet'];
+    const morningExtraOptions = ['Egg', 'Milk', 'High protein'];
+    const snacksOptions = ['Biscuit', 'Satu']; // launch
+    const nightMealOptions = ['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet', 'Chapati diet'];
+    const nightExtraOptions = ['Egg', 'Milk', 'High protein'];
+
+    const morningMealTotals = morningMealOptions.map(opt => filledPatientRows.filter(r => r.morningMeal === opt).length);
+    const morningExtraTotals = morningExtraOptions.map(opt => filledPatientRows.filter(r => r.morningExtra === opt).length);
+    const snacksTotals = snacksOptions.map(opt => filledPatientRows.filter(r => r.launch === opt).length);
+    const nightMealTotals = nightMealOptions.map(opt => filledPatientRows.filter(r => r.nightMeal === opt).length);
+    const nightExtraTotals = nightExtraOptions.map(opt => filledPatientRows.filter(r => r.nightExtra === opt).length);
+
     if (!user || user.role !== 'user') {
         return (
             <div className="access-denied-container">
@@ -609,8 +625,124 @@ const UserDashboard = () => {
                                     </td>
                                 </tr>
                             ))}
+                            {/* Totals row */}
                             <tr>
-                                <td colSpan="20" style={{ textAlign: 'center', padding: '1rem 0' }}>
+                                {/* Bed + IPD merged */}
+                                <td
+                                    className="table-cell"
+                                    colSpan="2"
+                                    style={{
+                                        ...groupSeparatorLeftStyle,
+                                        borderRight: '3px solid #374151',
+                                        borderTop: '3px solid #374151',
+                                        borderBottom: '3px solid #374151',
+                                        fontWeight: 700,
+                                        textAlign: 'center'
+                                    }}
+                                >
+                                    Total
+                                </td>
+                                {/* Patient name + Age merged */}
+                                <td
+                                    className="table-cell"
+                                    colSpan="2"
+                                    style={{
+                                        borderRight: '3px solid #374151',
+                                        borderTop: '3px solid #374151',
+                                        borderBottom: '3px solid #374151',
+                                        fontWeight: 600,
+                                        textAlign: 'center'
+                                    }}
+                                >
+                                    {patientsCount} {patientsCount === 1 ? 'patient' : 'patients'}
+                                </td>
+                                {/* Morning meal totals (4) */}
+                                {morningMealTotals.map((count, i) => (
+                                    <td
+                                        key={`total-morningMeal-${i}`}
+                                        className={`table-cell diet-cell${i < 3 ? ' light-border' : ' dark-border'}${morningMealOptions[i] === 'Under 12 years diet' ? ' under12-col' : ''}`}
+                                        style={{
+                                            borderTop: '3px solid #374151',
+                                            borderBottom: '3px solid #374151',
+                                            ...(i === 3 ? { borderRight: '3px solid #374151' } : {})
+                                        }}
+                                    >
+                                        <span className="table-input-small" style={{ fontWeight: 700 }}>{count}</span>
+                                    </td>
+                                ))}
+                                {/* Morning Extra totals (3) */}
+                                {morningExtraTotals.map((count, i) => (
+                                    <td
+                                        key={`total-morningExtra-${i}`}
+                                        className={`table-cell diet-cell${i === 0 ? ' light-border' : i === 1 ? ' dark-border' : ' light-border'}`}
+                                        style={{
+                                            borderTop: '3px solid #374151',
+                                            borderBottom: '3px solid #374151',
+                                            ...(i === 2 ? { borderRight: '3px solid #374151' } : {})
+                                        }}
+                                    >
+                                        <span className="table-input-small" style={{ fontWeight: 700 }}>{count}</span>
+                                    </td>
+                                ))}
+                                {/* Snacks totals (2) */}
+                                {snacksTotals.map((count, i) => (
+                                    <td
+                                        key={`total-launch-${i}`}
+                                        className={`table-cell diet-cell${i === 0 ? ' light-border biscuit-col' : ' dark-border'}`}
+                                        style={{
+                                            borderTop: '3px solid #374151',
+                                            borderBottom: '3px solid #374151',
+                                            ...(i === 1 ? { borderRight: '3px solid #374151' } : {})
+                                        }}
+                                    >
+                                        <span className="table-input-small" style={{ fontWeight: 700 }}>{count}</span>
+                                    </td>
+                                ))}
+                                {/* Night meal totals (5) */}
+                                {nightMealTotals.map((count, i) => (
+                                    <td
+                                        key={`total-nightMeal-${i}`}
+                                        className={`table-cell diet-cell${i < 4 ? ' light-border' : ' dark-border'}${nightMealOptions[i] === 'Under 12 years diet' ? ' under12-col' : ''}${nightMealOptions[i] === 'Chapati diet' ? ' chapati-col' : ''}`}
+                                        style={{
+                                            borderTop: '3px solid #374151',
+                                            borderBottom: '3px solid #374151',
+                                            ...(i === 4 ? { borderRight: '3px solid #374151' } : {})
+                                        }}
+                                    >
+                                        <span className="table-input-small" style={{ fontWeight: 700 }}>{count}</span>
+                                    </td>
+                                ))}
+                                {/* Night Extra totals (3) */}
+                                {nightExtraTotals.map((count, i) => (
+                                    <td
+                                        key={`total-nightExtra-${i}`}
+                                        className={`table-cell diet-cell${i === 0 ? ' light-border' : i === 1 ? '' : ' light-border'}`}
+                                        style={{
+                                            borderTop: '3px solid #374151',
+                                            borderBottom: '3px solid #374151',
+                                            ...(i === 2 ? { borderRight: '3px solid #374151' } : {})
+                                        }}
+                                    >
+                                        <span className="table-input-small" style={{ fontWeight: 700 }}>{count}</span>
+                                    </td>
+                                ))}
+                                {/* Status column (empty) */}
+                                <td
+                                    className="table-cell diet-cell"
+                                    style={{
+                                        ...groupSeparatorStyle,
+                                        ...groupSeparatorRightStyle,
+                                        borderTop: '3px solid #374151',
+                                        borderBottom: '3px solid #374151',
+                                        fontWeight: 700,
+                                        textAlign: 'center'
+                                    }}
+                                >
+                                    -
+                                </td>
+                            </tr>
+                            <tr>
+                                <td colSpan="22" style={{ textAlign: 'center', padding: '1rem 0' }}>
                                     <button 
                                         className="button button-success dashboard-save-btn compact-save-btn"
                                         type="button"
