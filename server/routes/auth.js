@@ -193,7 +193,7 @@ router.post('/login', async (req, res) => {
         }
         
         console.log('Vendor found:', vendor.email);
-        console.log('Password type check:', vendor.password.startsWith('$2b$') ? 'Hashed' : 'Plain text');
+        console.log('Password type check:', vendor.password && vendor.password.startsWith('$2b$') ? 'Hashed' : 'Plain text');
         
         // Handle both hashed and plain text passwords for vendors
         let isMatch = false;
@@ -204,7 +204,7 @@ router.post('/login', async (req, res) => {
         } catch (error) {
             // If comparePassword fails, try direct comparison for plain text passwords
             console.log('Vendor password comparison failed, trying direct comparison');
-            isMatch = (vendor.password === password);
+            isMatch = (vendor.password && vendor.password === password);
             console.log('Direct comparison result:', isMatch);
         }
         

@@ -78,6 +78,11 @@ router.get('/records/by-date', protect, async (req, res) => {
     // Group patients by ward (use user.department if patient.ward is missing)
     const grouped = {};
     records.forEach(record => {
+      // Check if userId exists and has department
+      if (!record.userId || !record.userId.department) {
+        console.warn('Record missing userId or department:', record._id);
+        return; // Skip records without valid userId/department
+      }
       const ward = record.userId.department;
       if (!grouped[ward]) grouped[ward] = [];
       record.patients.forEach(patient => {
