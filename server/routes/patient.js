@@ -25,7 +25,9 @@ router.post('/', protect, authorize('user'), async (req, res) => {
 
     if (!isValidData) {
         return res.status(400).json({ message: 'Please provide bed number, IPD number, name, and age for each patient.' });
-    }    try {
+    }
+    
+    try {
         // Find or create a record for the given date
         let patientRecord = await PatientRecord.findOne({ userId, date });
 

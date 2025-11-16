@@ -106,21 +106,31 @@ const VendorDashboard = () => {
   }, [year, month, day]);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchWards = async () => {
       try {
         const config = {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         };
         const res = await axios.get(`${API_BASE_URL}/vendor/wards`, config);
-        setWards(res.data.wards || []);
+        if (isMounted) {
+          setWards(res.data.wards || []);
+        }
       } catch (error) {
-        showToast('Error loading wards', 'error');
+        if (isMounted) {
+          console.error('Error loading wards:', error);
+          showToast('Error loading wards', 'error');
+        }
       }
     };
     fetchWards();
-  }, [API_BASE_URL, showToast]);
+    return () => {
+      isMounted = false;
+    };
+  }, [API_BASE_URL]);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchPatients = async () => {
       setLoading(true);
       try {
@@ -128,15 +138,25 @@ const VendorDashboard = () => {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         };
         const res = await axios.get(`${API_BASE_URL}/vendor/records/by-date?date=${selectedDate}`, config);
-        setWardPatients(res.data.grouped || {});
+        if (isMounted) {
+          setWardPatients(res.data.grouped || {});
+        }
       } catch (error) {
-        showToast('Error loading patient records', 'error');
+        if (isMounted) {
+          console.error('Error loading patient records:', error);
+          showToast('Error loading patient records', 'error');
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
     fetchPatients();
-  }, [API_BASE_URL, selectedDate, showToast]);
+    return () => {
+      isMounted = false;
+    };
+  }, [API_BASE_URL, selectedDate]);
 
   // Function to generate the monthly diet report (Diet × Ward × Orders), mirroring Admin
   const generateMonthlyDietReport = async () => {
