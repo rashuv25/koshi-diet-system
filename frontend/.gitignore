@@ -10,6 +10,13 @@ lerna-debug.log*
 node_modules/
 .env
 
+dist/
+*.local
+coverage/
+.turbo/
+.parcel-cache/
+.eslintcache
+
 
 
 # Editor directories and files
