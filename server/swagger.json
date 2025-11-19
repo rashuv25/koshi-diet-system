@@ -6,7 +6,7 @@
     "description": "API documentation for the MERN Hospital Management App."
   },
   "servers": [
-    { "url": "http://202.51.3.168:5004/api"  }
+    {"url": "http://202.51.3.168:5004/api"  }
   ],
   "paths": {
     "/auth/login": {
