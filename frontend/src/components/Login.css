@@ -1,0 +1,418 @@
+/* Professional Login Component Styles */
+
+.login-page-container {
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-4);
+  width: 100%;
+  background: linear-gradient(135deg, #e0f2fe 0%, #b3e5fc 50%, #81d4fa 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Animated background elements */
+.login-page-container::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 70%);
+  animation: float 20s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.login-page-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  33% { transform: translate(30px, -30px) rotate(120deg); }
+  66% { transform: translate(-20px, 20px) rotate(240deg); }
+}
+
+.card {
+  background: #fafdff; /* very light cyan/white */
+  border: 3px solid #2563eb; /* blue border */
+  color: #d32f2f;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08), 0 10px 20px rgba(0, 0, 0, 0.04);
+  padding: var(--spacing-8);
+  border-radius: var(--radius-2xl);
+  width: 32rem;
+  max-width: 32rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
+  animation: scaleIn 0.6s ease-out;
+  transition: all var(--transition-slow);
+}
+
+.card * {
+  color: #d32f2f !important;
+}
+
+.card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15), 0 15px 30px rgba(0, 0, 0, 0.1);
+}
+
+.logo {
+  width: 6rem;
+  height: 6rem;
+  object-fit: contain;
+  margin: 0 auto var(--spacing-6);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-lg);
+  display: block;
+  animation: fadeIn 0.8s ease-out 0.2s both;
+  transition: transform var(--transition-normal);
+}
+
+.logo:hover {
+  transform: scale(1.05);
+}
+
+.main-title {
+  font-size: var(--font-size-2xl);
+  font-weight: 800;
+  color: #d32f2f !important;
+  text-align: center;
+  margin-bottom: var(--spacing-4);
+  margin-top: calc(-1 * var(--spacing-4));
+  background: none;
+  -webkit-background-clip: unset;
+  -webkit-text-fill-color: unset;
+  background-clip: unset;
+  animation: fadeIn 0.8s ease-out 0.4s both;
+}
+
+.form-title {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--gray-700);
+  text-align: center;
+  margin-bottom: var(--spacing-6);
+  animation: fadeIn 0.8s ease-out 0.6s both;
+}
+
+.form-layout {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+  animation: fadeIn 0.8s ease-out 0.8s both;
+}
+
+.form-group {
+  margin-bottom: var(--spacing-4);
+  position: relative;
+}
+
+.label {
+  display: block;
+  color: var(--gray-700);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  margin-bottom: var(--spacing-2);
+  transition: color var(--transition-fast);
+}
+
+.form-group:focus-within .label {
+  color: var(--primary-color);
+}
+
+.input-field {
+  width: 100%;
+  padding: var(--spacing-3) var(--spacing-4);
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-base);
+  color: #222 !important;
+  background: rgba(255, 255, 255, 0.9);
+  transition: all var(--transition-normal);
+  outline: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.input-field:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  background: var(--white);
+  transform: translateY(-1px);
+}
+
+.input-field::placeholder {
+  color: var(--gray-400);
+}
+
+.button {
+  width: 100%;
+  padding: var(--spacing-4) var(--spacing-6);
+  border-radius: var(--radius-lg);
+  font-weight: 700;
+  font-size: var(--font-size-base);
+  color: #fff !important;
+  transition: all var(--transition-normal);
+  border: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+  box-shadow: var(--shadow-md);
+}
+
+.button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left var(--transition-slow);
+}
+
+.button:hover::before {
+  left: 100%;
+}
+
+.button:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.button:active {
+  transform: translateY(0);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.button-primary {
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+}
+
+.button-primary:hover {
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary-color));
+}
+
+.button-secondary {
+  background: linear-gradient(135deg, var(--gray-200), var(--gray-300));
+  color: var(--gray-700);
+}
+
+.button-secondary:hover {
+  background: linear-gradient(135deg, var(--gray-300), var(--gray-400));
+}
+
+.link-group {
+  margin-top: var(--spacing-6);
+  text-align: center;
+}
+
+.link-text {
+  color: var(--primary-color);
+  cursor: pointer;
+  text-decoration: none;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.link-text::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: var(--primary-color);
+  transition: width var(--transition-normal);
+}
+
+.link-text:hover {
+  color: var(--primary-dark);
+}
+
+.link-text:hover::after {
+  width: 100%;
+}
+
+/* Loading state animations */
+.button:disabled {
+  position: relative;
+}
+
+.button:disabled::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border: 2px solid transparent;
+  border-top: 2px solid var(--white);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive design */
+@media (max-width: 640px) {
+  .login-page-container {
+    padding: 0.5rem;
+    min-height: 100vh;
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+  .card {
+    width: 100vw;
+    max-width: 100vw;
+    min-width: 0;
+    padding: 1.2rem 0.5rem;
+    border-radius: 0;
+    box-shadow: none;
+    margin: 0;
+  }
+  .logo {
+    width: 4rem;
+    height: 4rem;
+    margin-bottom: 1rem;
+  }
+  .main-title {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+    margin-top: 0;
+  }
+  .form-title {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+  }
+  .form-layout {
+    gap: 0.75rem;
+  }
+  .form-group {
+    margin-bottom: 0.75rem;
+  }
+  .input-field {
+    font-size: 1rem;
+    padding: 0.5rem 0.75rem;
+  }
+  .button {
+    font-size: 1rem;
+    padding: 0.75rem 1rem;
+  }
+  .link-group {
+    margin-top: 1rem;
+  }
+  .govt-koshi-title {
+    font-size: 1rem !important;
+  }
+  /* Adjust emblem/flag row */
+  .card > div[style*='align-items: center'] {
+    gap: 10px !important;
+    margin: 10px 0 10px 0 !important;
+  }
+  .card img[alt='Nepali Emblem'],
+  .card img[alt='Nepali Flag'] {
+    height: 40px !important;
+  }
+}
+
+@media (max-width: 400px) {
+  .main-title, .form-title {
+    font-size: 0.95rem;
+  }
+  .logo {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+  .input-field, .button {
+    font-size: 0.95rem;
+  }
+}
+
+/* Mobile Responsive Rules */
+@media screen and (max-width: 768px) {
+  .login-page-container {
+    padding: 1rem;
+  }
+
+  .card {
+    padding: 1.5rem;
+    margin: 1rem;
+    width: 100%;
+    max-width: none;
+  }
+
+  input, button {
+    width: 100%;
+    font-size: 16px; /* Prevent iOS zoom on input focus */
+  }
+
+  .hospital-logo {
+    max-width: 80%;
+    height: auto;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .card {
+    background: #fafdff !important;
+    border-color: #2563eb !important;
+  }
+  .main-title {
+    color: #d32f2f !important;
+    background: none !important;
+    -webkit-background-clip: unset !important;
+    -webkit-text-fill-color: unset !important;
+    background-clip: unset !important;
+  }
+  
+  .form-title {
+    color: var(--gray-300);
+  }
+  
+  .label {
+    color: var(--gray-300);
+  }
+  
+  .input-field {
+    background: rgba(55, 65, 81, 0.9);
+    border-color: var(--gray-600);
+    color: var(--gray-200);
+  }
+  
+  .input-field:focus {
+    background: var(--gray-800);
+  }
+} 
+
+.govt-koshi-title {
+  color: #111 !important;
+}
