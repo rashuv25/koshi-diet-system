@@ -52,6 +52,7 @@ const AdminDashboard = () => {
     const [selectedReportMonth, setSelectedReportMonth] = useState('');
     const [selectedReportYear, setSelectedReportYear] = useState(defaultYear);
     const [isMonthlyWardWise, setIsMonthlyWardWise] = useState(false);
+    const [isMerged, setIsMerged] = useState(false);
     const nepaliMonths = [
         { number: '01', name: 'Baisakh' },
         { number: '02', name: 'Jestha' },
@@ -451,26 +452,110 @@ const AdminDashboard = () => {
                 }
             }
 
-            const overallTotals = monthlyDietSections.reduce((acc, section) => {
-                acc[section.key] = section.diets.reduce((dietAcc, diet) => {
-                    dietAcc[diet] = wardList.reduce((sum, ward) => sum + (matrix[section.key][diet][ward] || 0), 0);
-                    return dietAcc;
-                }, {});
-                return acc;
-            }, {});
+            // If merged is selected, create a merged matrix
+            let finalMatrix = matrix;
+            let finalWardSummaries = null;
+            let finalOverallTotals = null;
 
-            const wardSummaries = wardList.map(wardName => {
-                const summary = { ward: wardName };
-                monthlyDietSections.forEach(section => {
-                    summary[section.key] = section.diets.reduce((dietAcc, diet) => {
-                        dietAcc[diet] = matrix[section.key][diet][wardName] || 0;
+            if (isMerged) {
+                // Create merged matrix structure
+                const mergedMatrix = {
+                    merged: {
+                        'Normal diet': zeroWardMap(),
+                        'Under 12 years diet': zeroWardMap(),
+                        'Soft diet': zeroWardMap(),
+                        'Liquid diet': zeroWardMap(),
+                        'Chapati diet': zeroWardMap(),
+                        'Egg': zeroWardMap(),
+                        'Milk': zeroWardMap(),
+                        'High protein': zeroWardMap(),
+                        'Biscuit': zeroWardMap(),
+                        'Satu': zeroWardMap(),
+                    }
+                };
+
+                // Merge diets from different sections
+                // Normal diet, Under 12 years diet, Soft diet, Liquid diet: merge morning + night
+                ['Normal diet', 'Under 12 years diet', 'Soft diet', 'Liquid diet'].forEach(diet => {
+                    wardList.forEach(ward => {
+                        mergedMatrix.merged[diet][ward] = 
+                            (matrix.morning[diet]?.[ward] || 0) + 
+                            (matrix.night[diet]?.[ward] || 0);
+                    });
+                });
+
+                // Chapati diet: only from night
+                wardList.forEach(ward => {
+                    mergedMatrix.merged['Chapati diet'][ward] = matrix.night['Chapati diet']?.[ward] || 0;
+                });
+
+                // Egg, Milk, High protein: merge morningExtra + nightExtra
+                ['Egg', 'Milk', 'High protein'].forEach(diet => {
+                    wardList.forEach(ward => {
+                        mergedMatrix.merged[diet][ward] = 
+                            (matrix.morningExtra[diet]?.[ward] || 0) + 
+                            (matrix.nightExtra[diet]?.[ward] || 0);
+                    });
+                });
+
+                // Biscuit, Satu: only from launch
+                ['Biscuit', 'Satu'].forEach(diet => {
+                    wardList.forEach(ward => {
+                        mergedMatrix.merged[diet][ward] = matrix.launch[diet]?.[ward] || 0;
+                    });
+                });
+
+                finalMatrix = mergedMatrix;
+
+                // Create merged ward summaries
+                finalWardSummaries = wardList.map(wardName => {
+                    const summary = { ward: wardName };
+                    summary.merged = {};
+                    Object.keys(mergedMatrix.merged).forEach(diet => {
+                        summary.merged[diet] = mergedMatrix.merged[diet][wardName] || 0;
+                    });
+                    return summary;
+                });
+
+                // Create merged overall totals
+                finalOverallTotals = {
+                    merged: {}
+                };
+                Object.keys(mergedMatrix.merged).forEach(diet => {
+                    finalOverallTotals.merged[diet] = wardList.reduce(
+                        (sum, ward) => sum + (mergedMatrix.merged[diet][ward] || 0), 
+                        0
+                    );
+                });
+            } else {
+                // Original logic for non-merged reports
+                finalOverallTotals = monthlyDietSections.reduce((acc, section) => {
+                    acc[section.key] = section.diets.reduce((dietAcc, diet) => {
+                        dietAcc[diet] = wardList.reduce((sum, ward) => sum + (matrix[section.key][diet][ward] || 0), 0);
                         return dietAcc;
                     }, {});
-                });
-                return summary;
-            });
+                    return acc;
+                }, {});
 
-            setMonthlyDietReport([{ matrix, wards: wardList, wardSummaries, overallTotals }]);
+                finalWardSummaries = wardList.map(wardName => {
+                    const summary = { ward: wardName };
+                    monthlyDietSections.forEach(section => {
+                        summary[section.key] = section.diets.reduce((dietAcc, diet) => {
+                            dietAcc[diet] = matrix[section.key][diet][wardName] || 0;
+                            return dietAcc;
+                    }, {});
+                    });
+                    return summary;
+                });
+            }
+
+            setMonthlyDietReport([{ 
+                matrix: finalMatrix, 
+                wards: wardList, 
+                wardSummaries: finalWardSummaries, 
+                overallTotals: finalOverallTotals,
+                isMerged 
+            }]);
         } catch (error) {
             console.error("Error generating monthly report:", error);
             showToast('Error generating monthly report', 'error');
@@ -483,7 +568,8 @@ const AdminDashboard = () => {
     // Download monthly report as PDF (Diet × Ward matrix)
     const handleDownloadMonthlyReport = () => {
         if (!monthlyDietReport.length) return;
-        const { matrix, wards: wardList, wardSummaries = [], overallTotals = {} } = monthlyDietReport[0];
+        const { matrix, wards: wardList, wardSummaries = [], overallTotals = {}, isMerged: reportIsMerged } = monthlyDietReport[0];
+        const isMergedReport = reportIsMerged || false;
 
         if (isMonthlyWardWise) {
             const doc = new jsPDF('p', 'pt', 'a4');
@@ -494,13 +580,34 @@ const AdminDashboard = () => {
 
             const buildSummaryBody = (source) => {
                 const rows = [];
-                monthlyDietSections.forEach(section => {
-                    rows.push([{ content: section.title, colSpan: 2, styles: { fillColor: '#f5f5f5', fontStyle: 'bold', halign: 'left' } }]);
-                    section.diets.forEach(diet => {
-                        const value = (source[section.key] && source[section.key][diet]) || 0;
+                if (isMergedReport && source.merged) {
+                    // Build merged diet rows
+                    const mergedDiets = [
+                        'Normal diet',
+                        'Under 12 years diet',
+                        'Soft diet',
+                        'Liquid diet',
+                        'Chapati diet',
+                        'Egg',
+                        'Milk',
+                        'High protein',
+                        'Biscuit',
+                        'Satu'
+                    ];
+                    mergedDiets.forEach(diet => {
+                        const value = source.merged[diet] || 0;
                         rows.push([diet, String(value)]);
                     });
-                });
+                } else {
+                    // Original logic
+                    monthlyDietSections.forEach(section => {
+                        rows.push([{ content: section.title, colSpan: 2, styles: { fillColor: '#f5f5f5', fontStyle: 'bold', halign: 'left' } }]);
+                        section.diets.forEach(diet => {
+                            const value = (source[section.key] && source[section.key][diet]) || 0;
+                            rows.push([diet, String(value)]);
+                        });
+                    });
+                }
                 return rows;
             };
 
@@ -508,7 +615,8 @@ const AdminDashboard = () => {
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(18);
                 doc.setTextColor(bodyTextColor);
-                doc.text('Ward-wise Monthly Diet Report', pageWidth / 2, 40, { align: 'center' });
+                const reportTitle = isMergedReport ? 'Ward-wise Monthly Diet Report (Merged)' : 'Ward-wise Monthly Diet Report';
+                doc.text(reportTitle, pageWidth / 2, 40, { align: 'center' });
                 doc.setFont('helvetica', 'normal');
                 doc.setFontSize(12);
                 doc.text(`Year: ${selectedReportYear}  Month: ${nepaliMonths.find(m => m.number === selectedReportMonth)?.name || ''}`, pageWidth / 2, 60, { align: 'center' });
@@ -557,7 +665,10 @@ const AdminDashboard = () => {
                 });
             }
 
-            doc.save(`Ward_Wise_Monthly_Diet_Report_${selectedReportYear}_${selectedReportMonth}.pdf`);
+            const fileName = isMergedReport 
+                ? `Ward_Wise_Merged_Monthly_Diet_Report_${selectedReportYear}_${selectedReportMonth}.pdf`
+                : `Ward_Wise_Monthly_Diet_Report_${selectedReportYear}_${selectedReportMonth}.pdf`;
+            doc.save(fileName);
             return;
         }
 
@@ -571,36 +682,37 @@ const AdminDashboard = () => {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(18);
         doc.setTextColor(bodyTextColor);
-        doc.text('Monthly Diet Report', pageWidth / 2, 40, { align: 'center' });
+        const reportTitle = isMergedReport ? 'Monthly Diet Report (Merged)' : 'Monthly Diet Report';
+        doc.text(reportTitle, pageWidth / 2, 40, { align: 'center' });
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(12);
         doc.text(`Year: ${selectedReportYear}  Month: ${nepaliMonths.find(m => m.number === selectedReportMonth)?.name || ''}`, pageWidth / 2, 60, { align: 'center' });
 
-        const buildSection = (title, dietsObj) => {
+        if (isMergedReport && matrix.merged) {
+            // Render merged report
+            const mergedDiets = [
+                'Normal diet',
+                'Under 12 years diet',
+                'Soft diet',
+                'Liquid diet',
+                'Chapati diet',
+                'Egg',
+                'Milk',
+                'High protein',
+                'Biscuit',
+                'Satu'
+            ];
+            
             const head = [['Diet', ...wardList, 'Total']];
             const body = [];
-            body.push([{ content: title, colSpan: head[0].length, styles: { fillColor: '#f5f5f5', fontStyle: 'bold', halign: 'left' } }]);
-            Object.keys(dietsObj).forEach(dietName => {
-                const wardCounts = wardList.map(w => dietsObj[dietName][w] || 0);
+            mergedDiets.forEach(dietName => {
+                const wardCounts = wardList.map(w => matrix.merged[dietName][w] || 0);
                 const total = wardCounts.reduce((a, b) => a + b, 0);
                 body.push([dietName, ...wardCounts.map(String), String(total)]);
             });
-            return { head, body };
-        };
-
-        const sections = [
-            ['Morning meal', matrix.morning],
-            ['Any one', matrix.morningExtra],
-            ['Snacks', matrix.launch],
-            ['Night Meal (any one)', matrix.night],
-            ['Any one', matrix.nightExtra],
-        ];
-
-        let startY = 80;
-        sections.forEach(([title, diets]) => {
-            const { head, body } = buildSection(title, diets);
+            
             autoTable(doc, {
-                startY,
+                startY: 80,
                 head,
                 body,
                 theme: 'grid',
@@ -608,13 +720,52 @@ const AdminDashboard = () => {
                 headStyles: { fillColor: darkColor, textColor: headerTextColor, fontStyle: 'bold', halign: 'center' },
                 columnStyles: { 0: { cellWidth: 160, halign: 'left' } },
                 margin: { left: 30, right: 30 },
-                didDrawPage: (data) => {
-                    startY = data.cursor.y + 16;
-                },
             });
-        });
+        } else {
+            // Original non-merged rendering
+            const buildSection = (title, dietsObj) => {
+                const head = [['Diet', ...wardList, 'Total']];
+                const body = [];
+                body.push([{ content: title, colSpan: head[0].length, styles: { fillColor: '#f5f5f5', fontStyle: 'bold', halign: 'left' } }]);
+                Object.keys(dietsObj).forEach(dietName => {
+                    const wardCounts = wardList.map(w => dietsObj[dietName][w] || 0);
+                    const total = wardCounts.reduce((a, b) => a + b, 0);
+                    body.push([dietName, ...wardCounts.map(String), String(total)]);
+                });
+                return { head, body };
+            };
 
-        doc.save(`Monthly_Diet_Report_${selectedReportYear}_${selectedReportMonth}.pdf`);
+            const sections = [
+                ['Morning meal', matrix.morning],
+                ['Any one', matrix.morningExtra],
+                ['Snacks', matrix.launch],
+                ['Night Meal (any one)', matrix.night],
+                ['Any one', matrix.nightExtra],
+            ];
+
+            let startY = 80;
+            sections.forEach(([title, diets]) => {
+                const { head, body } = buildSection(title, diets);
+                autoTable(doc, {
+                    startY,
+                    head,
+                    body,
+                    theme: 'grid',
+                    styles: { font: 'helvetica', textColor: bodyTextColor, lineColor: '#E5E7EB', lineWidth: 1, fontSize: 9, cellPadding: 5 },
+                    headStyles: { fillColor: darkColor, textColor: headerTextColor, fontStyle: 'bold', halign: 'center' },
+                    columnStyles: { 0: { cellWidth: 160, halign: 'left' } },
+                    margin: { left: 30, right: 30 },
+                    didDrawPage: (data) => {
+                        startY = data.cursor.y + 16;
+                    },
+                });
+            });
+        }
+
+        const fileName = isMergedReport 
+            ? `Merged_Monthly_Diet_Report_${selectedReportYear}_${selectedReportMonth}.pdf`
+            : `Monthly_Diet_Report_${selectedReportYear}_${selectedReportMonth}.pdf`;
+        doc.save(fileName);
     };
 
     const [selectedDate, setSelectedDate] = useState(null);
@@ -1347,6 +1498,17 @@ const AdminDashboard = () => {
                             />
                             Ward wise
                         </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15 }}>
+                            <input 
+                                type="checkbox" 
+                                checked={isMerged} 
+                                onChange={e => {
+                                    setIsMerged(e.target.checked);
+                                    setMonthlyDietReport([]);
+                                }} 
+                            />
+                            Merged
+                        </label>
                         <button 
                             className="button button-success"
                             onClick={generateMonthlyDietReport}
@@ -1367,25 +1529,58 @@ const AdminDashboard = () => {
                     {/* Report Table */}
                     {monthlyDietReport.length > 0 && (
                         (() => {
+                            const { isMerged: reportIsMerged } = monthlyDietReport[0] || {};
+                            const isMergedReport = reportIsMerged || false;
+
                             if (isMonthlyWardWise) {
                                 const { wardSummaries = [], overallTotals = {} } = monthlyDietReport[0];
-                                const renderSummaryRows = (source) => (
-                                    <>
-                                        {monthlyDietSections.map(section => (
-                                            <React.Fragment key={section.key}>
-                                                <tr>
-                                                    <td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>{section.title}</td>
-                                                </tr>
-                                                {section.diets.map(diet => (
-                                                    <tr key={`${section.key}-${diet}`}>
+                                
+                                const renderSummaryRows = (source) => {
+                                    if (isMergedReport && source.merged) {
+                                        // Render merged diets
+                                        const mergedDiets = [
+                                            'Normal diet',
+                                            'Under 12 years diet',
+                                            'Soft diet',
+                                            'Liquid diet',
+                                            'Chapati diet',
+                                            'Egg',
+                                            'Milk',
+                                            'High protein',
+                                            'Biscuit',
+                                            'Satu'
+                                        ];
+                                        return (
+                                            <>
+                                                {mergedDiets.map(diet => (
+                                                    <tr key={`merged-${diet}`}>
                                                         <td style={{ paddingLeft: 24 }}>{diet}</td>
-                                                        <td style={{ textAlign: 'center' }}>{(source[section.key] && source[section.key][diet]) || 0}</td>
+                                                        <td style={{ textAlign: 'center' }}>{source.merged[diet] || 0}</td>
                                                     </tr>
                                                 ))}
-                                            </React.Fragment>
-                                        ))}
-                                    </>
-                                );
+                                            </>
+                                        );
+                                    } else {
+                                        // Original rendering
+                                        return (
+                                            <>
+                                                {monthlyDietSections.map(section => (
+                                                    <React.Fragment key={section.key}>
+                                                        <tr>
+                                                            <td colSpan="2" style={{ fontWeight: 700, background: '#f5f5f5' }}>{section.title}</td>
+                                                        </tr>
+                                                        {section.diets.map(diet => (
+                                                            <tr key={`${section.key}-${diet}`}>
+                                                                <td style={{ paddingLeft: 24 }}>{diet}</td>
+                                                                <td style={{ textAlign: 'center' }}>{(source[section.key] && source[section.key][diet]) || 0}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </React.Fragment>
+                                                ))}
+                                            </>
+                                        );
+                                    }
+                                };
 
                                 return (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -1430,6 +1625,53 @@ const AdminDashboard = () => {
                             }
 
                             const { matrix, wards: wardList } = monthlyDietReport[0];
+                            
+                            if (isMergedReport && matrix.merged) {
+                                // Render merged report
+                                const mergedDiets = [
+                                    'Normal diet',
+                                    'Under 12 years diet',
+                                    'Soft diet',
+                                    'Liquid diet',
+                                    'Chapati diet',
+                                    'Egg',
+                                    'Milk',
+                                    'High protein',
+                                    'Biscuit',
+                                    'Satu'
+                                ];
+                                
+                                return (
+                                    <div style={{ maxHeight: '400px', overflowX: 'auto', overflowY: 'auto' }}>
+                                        <table className="data-table" style={{ width: '100%', minWidth: Math.max(600, 180 + wardList.length * 100), color: '#111' }}>
+                                            <thead>
+                                                <tr>
+                                                    <th className="table-cell-header" style={{ minWidth: 160, textAlign: 'left' }}>Diet</th>
+                                                    {wardList.map(w => (
+                                                        <th key={w} className="table-cell-header" style={{ minWidth: 90, textAlign: 'center' }}>{w}</th>
+                                                    ))}
+                                                    <th className="table-cell-header" style={{ minWidth: 90, textAlign: 'center' }}>Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody style={{ color: '#111' }}>
+                                                {mergedDiets.map(dietName => (
+                                                    <tr key={dietName}>
+                                                        <td style={{ paddingLeft: 16 }}>{dietName}</td>
+                                                        {wardList.map(w => (
+                                                            <td key={w + dietName} style={{ textAlign: 'center' }}>{matrix.merged[dietName][w] || 0}</td>
+                                                        ))}
+                                                        <td style={{ fontWeight: 600, textAlign: 'center' }}>
+                                                            {wardList.reduce((sum, w) => sum + (matrix.merged[dietName][w] || 0), 0)}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                );
+                            }
+                            
+                            // Original non-merged rendering
                             const renderSection = (title, diets) => (
                                 <>
                                     <tr>
